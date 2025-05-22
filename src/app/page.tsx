@@ -405,7 +405,7 @@ export default function ChatPage() {
             )}
             <SidebarMenu className="p-2">
               {sortedConversations.map(conv => (
-                <SidebarMenuItem key={conv.id} className="group/conv-item">
+                <SidebarMenuItem key={conv.id} className="group/conv-item flex items-center justify-between">
                   {editingConversation?.id === conv.id ? (
                     <div className="flex items-center gap-2 p-1 w-full">
                       <Input 
@@ -423,32 +423,42 @@ export default function ChatPage() {
                       <Button variant="ghost" size="icon" onClick={handleCancelEditConversationTitle} className="h-8 w-8 text-red-500 hover:text-red-400"><X size={16}/></Button>
                     </div>
                   ) : (
-                    <SidebarMenuButton
-                      isActive={conv.id === activeConversationId}
-                      onClick={() => handleSelectConversation(conv.id)}
-                      tooltip={{ children: conv.title, side: 'right', align: 'center' }}
-                      className="justify-between w-full group-data-[collapsible=icon]:justify-center"
-                    >
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <MessageSquare size={18} className="text-muted-foreground group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
-                        <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
+                    <>
+                      <SidebarMenuButton
+                        isActive={conv.id === activeConversationId}
+                        onClick={() => handleSelectConversation(conv.id)}
+                        tooltip={{ children: conv.title, side: 'right', align: 'center' }}
+                        className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center" // Adjusted: flex-grow, removed w-full & justify-between
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <MessageSquare size={18} className="text-muted-foreground group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
+                          <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
+                        </div>
+                      </SidebarMenuButton>
+                      
+                      <div className="flex-shrink-0 group-data-[collapsible=icon]:hidden">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100" 
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreHorizontal size={16} />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start">
+                            <DropdownMenuItem onClick={() => handleStartEditConversationTitle(conv)}>
+                              <Pencil size={14} className="mr-2" /> Edit Title
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)} className="text-red-500 hover:!text-red-500 focus:!text-red-500">
+                              <Trash2 size={14} className="mr-2" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 group-data-[collapsible=icon]:hidden focus:opacity-100" onClick={(e) => e.stopPropagation()}>
-                            <MoreHorizontal size={16} />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start">
-                          <DropdownMenuItem onClick={() => handleStartEditConversationTitle(conv)}>
-                            <Pencil size={14} className="mr-2" /> Edit Title
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)} className="text-red-500 hover:!text-red-500 focus:!text-red-500">
-                            <Trash2 size={14} className="mr-2" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </SidebarMenuButton>
+                    </>
                   )}
                 </SidebarMenuItem>
               ))}
@@ -528,5 +538,3 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
-
-    
