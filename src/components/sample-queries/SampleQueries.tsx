@@ -22,7 +22,7 @@ const CloudIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export function SampleQueries({ queries, onQueryClick }: SampleQueriesProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-      <CloudIcon className="w-20 h-auto text-primary mb-8 animate-float" data-ai-hint="cloud" />
+      <CloudIcon className="w-20 h-auto text-primary mb-8 animate-float" data-ai-hint="cloud weather" />
       <h2 className="text-2xl font-semibold mb-4 text-foreground">Start a conversation</h2>
       <p className="text-muted-foreground mb-8">
         You can ask me anything! Here are a few examples to get you started:
@@ -32,10 +32,10 @@ export function SampleQueries({ queries, onQueryClick }: SampleQueriesProps) {
           <Button
             key={index}
             variant="outline"
-            className="text-left justify-start h-auto py-3 px-4 hover:bg-accent/50"
+            className="text-left justify-start h-auto py-4 px-5 hover:bg-accent/50 w-full"
             onClick={() => onQueryClick(query)}
           >
-            {query}
+            <span className="truncate">{query}</span>
           </Button>
         ))}
       </div>
