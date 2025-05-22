@@ -44,7 +44,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarRail, 
-  SidebarTrigger, // Added SidebarTrigger
+  SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
@@ -100,7 +100,7 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [toast]); // Removed activeConversationId from deps to avoid re-triggering
+  }, [toast]); 
 
   // Save conversations to localStorage whenever they change
   useEffect(() => {
@@ -189,7 +189,7 @@ export default function ChatPage() {
       });
 
       const newAiMessage: Message = {
-        id: (Date.now() + 1).toString(), // Ensure unique ID
+        id: (Date.now() + 1).toString(), 
         text: aiResponseResult.response,
         sender: 'ai',
         timestamp: Date.now(),
@@ -242,7 +242,7 @@ export default function ChatPage() {
             ...conv,
             messages: conv.messages.map(msg => 
               msg.id === editingMessage.id 
-                ? { ...msg, text: editingMessageText, timestamp: Date.now() } // Optionally update timestamp
+                ? { ...msg, text: editingMessageText, timestamp: Date.now() } 
                 : msg
             ),
           }
@@ -336,11 +336,15 @@ export default function ChatPage() {
             <ChatLogo className="h-6 w-6 text-primary" />
             <h2 className="text-lg font-semibold text-foreground group-data-[collapsible=icon]:hidden">Chats</h2>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleNewChat} 
-                  className="text-primary hover:text-primary-foreground hover:bg-primary group-data-[collapsible=icon]:mx-auto"
-                  title="New Chat">
-            <Plus size={20} />
-            <span className="sr-only">New Chat</span>
+          <Button
+            variant="ghost"
+            onClick={handleNewChat}
+            className="flex items-center text-primary hover:text-primary-foreground hover:bg-primary px-2 py-1.5 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:mx-auto"
+            title="New Chat"
+          >
+            <Plus size={20} className="flex-shrink-0" />
+            <span className="ml-2 group-data-[collapsible=icon]:hidden">New Chat</span>
+            <span className="sr-only group-data-[collapsible=expanded]:hidden">New Chat</span>
           </Button>
         </SidebarHeader>
         <SidebarContent className="p-0">
@@ -407,7 +411,7 @@ export default function ChatPage() {
       <SidebarInset className="flex flex-col !p-0">
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center p-4 shadow-md">
-            <SidebarTrigger className="mr-2" /> {/* Added SidebarTrigger here */}
+            <SidebarTrigger className="mr-2" /> 
             <ChatLogo className="h-8 w-8 text-primary mr-3" />
             <h1 className="text-xl font-semibold">DeepReact Chat</h1>
           </header>
