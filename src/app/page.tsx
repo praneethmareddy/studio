@@ -9,14 +9,15 @@ import { ChatInput } from '@/components/chat/ChatInput';
 import { ChatLogo } from '@/components/icons/ChatLogo';
 // import { summarizeChatHistory } from '@/ai/flows/summarize-chat-history'; // Commented out for echo response
 // import { generateResponse } from '@/ai/flows/generate-response'; // Commented out for echo response
-import { SampleQueries } from '@/components/sample-queries/SampleQueries'; // New import
+import { SampleQueries } from '@/components/sample-queries/SampleQueries';
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft } from 'lucide-react'; // Changed Plus to SquarePen
+import { ThemeToggleButton } from '@/components/theme-toggle-button'; // Import ThemeToggleButton
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +39,7 @@ import {
   Sidebar,
   SidebarHeader,
   SidebarContent,
-  SidebarFooter,
+  // SidebarFooter, // Not used for now
   SidebarInset,
   SidebarMenu,
   SidebarMenuItem,
@@ -78,7 +79,7 @@ export default function ChatPage() {
   const [editingConversation, setEditingConversation] = useState<Conversation | null>(null);
   const [editingConversationTitleText, setEditingConversationTitleText] = useState<string>('');
   
-  const [chatInputValue, setChatInputValue] = useState(''); // New state for controlled ChatInput
+  const [chatInputValue, setChatInputValue] = useState('');
 
   const [alertDialogState, setAlertDialogState] = useState<AlertDialogState>({
     isOpen: false,
@@ -108,7 +109,7 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [toast]); // activeConversationId removed from deps to prevent resetting on new chat
+  }, [toast]);
 
   useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
@@ -136,13 +137,13 @@ export default function ChatPage() {
   const handleNewChat = () => {
     setEditingConversation(null); 
     setActiveConversationId(null); 
-    setChatInputValue(''); // Clear input for new chat
+    setChatInputValue('');
   };
 
   const handleSelectConversation = (conversationId: string) => {
     setEditingConversation(null); 
     setActiveConversationId(conversationId);
-    setChatInputValue(''); // Clear input when switching conversations
+    setChatInputValue('');
   };
 
   const handleSampleQueryClick = (query: string) => {
@@ -150,7 +151,7 @@ export default function ChatPage() {
   };
 
   const handleSendMessage = async (text: string) => {
-    if (!text.trim()) return; // Ensure text is not empty after trim
+    if (!text.trim()) return;
 
     const newUserMessage: Message = {
       id: Date.now().toString(),
@@ -181,20 +182,16 @@ export default function ChatPage() {
       );
     }
     setConversations(updatedConversations.sort((a, b) => b.timestamp - a.timestamp));
-    setChatInputValue(''); // Clear input after sending
+    setChatInputValue('');
 
-    // Simplified AI response for testing: Echo the user's message
     try {
-      // Simulate AI thinking time
       await new Promise(resolve => setTimeout(resolve, 500));
-
       const newAiMessage: Message = {
-        id: (Date.now() + 1).toString(), // Ensure unique ID
-        text: `Echo: ${text}`, // AI echoes the user's message
+        id: (Date.now() + 1).toString(),
+        text: `Echo: ${text}`,
         sender: 'ai',
         timestamp: Date.now(),
       };
-
       setConversations(prevConvs =>
         prevConvs.map(conv =>
           conv.id === currentConversationId
@@ -202,9 +199,8 @@ export default function ChatPage() {
             : conv
         ).sort((a, b) => b.timestamp - a.timestamp)
       );
-
     } catch (error) {
-      console.error('Error generating echo response:', error); // Should not happen with echo
+      console.error('Error generating echo response:', error);
       toast({
         title: "Echo Error",
         description: "Sorry, I couldn't generate an echo response.",
@@ -213,68 +209,6 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
     }
-
-    /* // Original AI interaction logic - commented out for echo testing
-    try {
-      const conversationForAI = updatedConversations.find(c => c.id === currentConversationId);
-      if (!conversationForAI) throw new Error("Active conversation not found");
-
-      let contextSummary = "No previous conversation.";
-      const messagesForSummary = conversationForAI.messages.slice(0, -1); 
-      if (messagesForSummary.length > 0) {
-        const historyToSummarize = messagesForSummary
-          .map((msg) => `${msg.sender === 'user' ? 'User' : 'AI'}: ${msg.text}`)
-          .join('\n');
-        if (historyToSummarize) {
-          const summaryResult = await summarizeChatHistory({ chatHistory: historyToSummarize });
-          contextSummary = summaryResult.summary;
-        }
-      }
-
-      const aiResponseResult = await generateResponse({
-        prompt: text,
-        contextSummary,
-      });
-
-      const newAiMessage: Message = {
-        id: (Date.now() + 1).toString(), 
-        text: aiResponseResult.response,
-        sender: 'ai',
-        timestamp: Date.now(),
-      };
-
-      setConversations(prevConvs =>
-        prevConvs.map(conv =>
-          conv.id === currentConversationId
-            ? { ...conv, messages: [...conv.messages, newAiMessage], timestamp: Date.now() }
-            : conv
-        ).sort((a, b) => b.timestamp - a.timestamp)
-      );
-
-    } catch (error) {
-      console.error('Error interacting with AI:', error);
-      toast({
-        title: "AI Error",
-        description: "Sorry, I couldn't generate a response. Please try again.",
-        variant: "destructive",
-      });
-      const errorAiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: "I encountered an error. Please try sending your message again.",
-        sender: 'ai',
-        timestamp: Date.now(),
-      };
-      setConversations(prevConvs =>
-        prevConvs.map(conv =>
-          conv.id === currentConversationId
-            ? { ...conv, messages: [...conv.messages, errorAiMessage], timestamp: Date.now() }
-            : conv
-        ).sort((a, b) => b.timestamp - a.timestamp)
-      );
-    } finally {
-      setIsLoading(false);
-    }
-    */
   };
 
   const handleStartEditMessage = (message: Message) => {
@@ -374,24 +308,19 @@ export default function ChatPage() {
     return activeConversation.messages.find(m => m.id === editingMessage.id) || null;
   }, [editingMessage, activeConversation]);
 
-  // Determine if sample queries should be displayed
   const displaySampleQueries = !activeConversation || (activeConversation.messages && activeConversation.messages.length === 0);
 
   return (
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" className="border-r">
-        <SidebarHeader className="p-2 flex items-center justify-between border-b">
-          <div className="flex items-center gap-2 p-2">
-            <ChatLogo className="h-6 w-6 text-primary" />
-            <h2 className="text-lg font-semibold text-foreground group-data-[collapsible=icon]:hidden">Chats</h2>
-          </div>
+        <SidebarHeader className="p-2 border-b">
           <Button
-            variant="ghost"
+            variant="outline" // Using outline for better contrast with sidebar bg
             onClick={handleNewChat}
-            className="flex items-center text-primary hover:text-primary-foreground hover:bg-primary px-2 py-1.5 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:mx-auto"
+            className="w-full flex items-center justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground px-3 py-2 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center"
             title="New Chat"
           >
-            <Plus size={20} className="flex-shrink-0" />
+            <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
             <span className="ml-2 group-data-[collapsible=icon]:hidden">New Chat</span>
             <span className="sr-only group-data-[collapsible=expanded]:hidden">New Chat</span>
           </Button>
@@ -416,11 +345,11 @@ export default function ChatPage() {
                           if (e.key === 'Enter') handleSaveEditedConversationTitle();
                           if (e.key === 'Escape') handleCancelEditConversationTitle();
                         }}
-                        className="h-8 flex-grow"
+                        className="h-8 flex-grow bg-input text-foreground border-border focus:ring-ring"
                         autoFocus
                       />
                       <Button variant="ghost" size="icon" onClick={handleSaveEditedConversationTitle} className="h-8 w-8 text-primary hover:text-primary/80"><Save size={16}/></Button>
-                      <Button variant="ghost" size="icon" onClick={handleCancelEditConversationTitle} className="h-8 w-8 text-red-500 hover:text-red-400"><X size={16}/></Button>
+                      <Button variant="ghost" size="icon" onClick={handleCancelEditConversationTitle} className="h-8 w-8 text-destructive hover:text-destructive/80"><X size={16}/></Button>
                     </div>
                   ) : (
                     <>
@@ -428,7 +357,7 @@ export default function ChatPage() {
                         isActive={conv.id === activeConversationId}
                         onClick={() => handleSelectConversation(conv.id)}
                         tooltip={{ children: conv.title, side: 'right', align: 'center' }}
-                        className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center" // Adjusted: flex-grow, removed w-full & justify-between
+                        className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center"
                       >
                         <div className="flex items-center gap-2 overflow-hidden">
                           <MessageSquare size={18} className="text-muted-foreground group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
@@ -442,7 +371,7 @@ export default function ChatPage() {
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100" 
+                              className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground" 
                               onClick={(e) => e.stopPropagation()}
                             >
                               <MoreHorizontal size={16} />
@@ -452,7 +381,7 @@ export default function ChatPage() {
                             <DropdownMenuItem onClick={() => handleStartEditConversationTitle(conv)}>
                               <Pencil size={14} className="mr-2" /> Edit Title
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)} className="text-red-500 hover:!text-red-500 focus:!text-red-500">
+                            <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)} className="text-destructive hover:!text-destructive focus:!text-destructive">
                               <Trash2 size={14} className="mr-2" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -469,20 +398,23 @@ export default function ChatPage() {
       <SidebarRail /> 
       <SidebarInset className="flex flex-col !p-0">
         <div className="flex flex-col h-screen bg-background text-foreground">
-          <header className="flex items-center p-4 shadow-md">
-            <SidebarTrigger className="mr-2" /> 
-            <ChatLogo className="h-8 w-8 text-primary mr-3" />
-            <h1 className="text-xl font-semibold">DeepReact Chat</h1>
+          <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
+            <div className="flex items-center">
+              <SidebarTrigger className="mr-2 text-muted-foreground hover:text-foreground" /> 
+              <ChatLogo className="h-8 w-8 text-primary mr-3" />
+              <h1 className="text-xl font-semibold text-foreground">DeepReact Chat</h1>
+            </div>
+            <ThemeToggleButton />
           </header>
-          <Separator />
+          {/* Separator removed as header now has border-b */}
           <main className="flex-1 overflow-hidden">
              {currentEditingMessage && activeConversationId ? (
                 <div className="p-4 border-t border-border bg-card">
-                  <h3 className="text-sm font-semibold mb-2">Editing message:</h3>
+                  <h3 className="text-sm font-semibold mb-2 text-card-foreground">Editing message:</h3>
                   <Textarea
                     value={editingMessageText}
                     onChange={(e) => setEditingMessageText(e.target.value)}
-                    className="mb-2"
+                    className="mb-2 bg-input text-foreground border-border focus:ring-ring"
                     rows={3}
                     autoFocus
                   />
@@ -502,7 +434,7 @@ export default function ChatPage() {
                     onEditMessage={handleStartEditMessage}
                     onDeleteMessage={handleDeleteMessage}
                     activeConversationId={activeConversationId}
-                    isLoading={isLoading} // Pass isLoading
+                    isLoading={isLoading}
                  />
               )}
           </main>

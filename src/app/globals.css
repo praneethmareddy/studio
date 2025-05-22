@@ -3,52 +3,108 @@
 @tailwind utilities;
 
 @layer base {
+  /* Light theme variables (default) */
   :root {
-    --background: 222 47% 11%; /* Dark Desaturated Blue */
-    --foreground: 210 40% 96%; /* Very Light Greyish Blue */
+    --background: 0 0% 100%; /* White */
+    --foreground: 222 47% 11%; /* Dark Desaturated Blue (Text on White) */
 
-    --card: 222 47% 14%; /* Slightly Lighter Dark Blue for Card Background */
-    --card-foreground: 210 40% 96%; /* Card Text Color */
+    --card: 0 0% 97%; /* Very Light Grey for Card Background */
+    --card-foreground: 222 47% 11%; /* Card Text Color */
 
-    --popover: 222 47% 12%; /* Popover Background */
-    --popover-foreground: 210 40% 96%; /* Popover Text Color */
+    --popover: 0 0% 100%; /* Popover Background (White) */
+    --popover-foreground: 222 47% 11%; /* Popover Text Color */
 
-    --primary: 217 91% 60%; /* Bright Blue - for primary actions/elements */
-    --primary-foreground: 210 40% 98%; /* Text on Primary elements - Almost White */
+    --primary: 217 91% 60%; /* Bright Blue */
+    --primary-foreground: 210 40% 98%; /* Text on Primary (Almost White) */
 
-    --secondary: 217 33% 50%; /* Muted Blue - for secondary actions/elements */
-    --secondary-foreground: 210 40% 98%; /* Text on Secondary elements */
+    --secondary: 220 10% 90%; /* Light Grey - for secondary actions/elements */
+    --secondary-foreground: 222 47% 20%; /* Darker text on light grey */
 
-    --muted: 215 28% 17%; /* Darker Muted Blue - for less prominent elements */
-    --muted-foreground: 215 20% 65%; /* Greyish Blue for muted text */
+    --muted: 220 10% 85%; /* Lighter Grey - for less prominent elements */
+    --muted-foreground: 222 20% 45%; /* Greyish Blue for muted text */
 
-    --accent: 210 70% 65%; /* Softer, Lighter Blue - for accents, highlights */
-    --accent-foreground: 210 40% 98%; /* Text on Accent elements */
+    --accent: 210 90% 55%; /* A slightly lighter, vibrant blue for general accents */
+    --accent-foreground: 0 0% 100%; /* Text on Accent elements (White) */
 
-    --destructive: 0 72% 51%; /* Default destructive red */
+    --destructive: 0 84% 60%; /* Standard destructive red */
     --destructive-foreground: 0 0% 98%; /* Text on Destructive elements */
 
-    --border: 215 28% 20%; /* Subtle border color */
-    --input: 215 28% 17%; /* Input background color */
-    --ring: 217 91% 65%; /* Ring color for focus states, based on primary */
+    --border: 220 15% 88%; /* Subtle border color */
+    --input: 220 15% 92%; /* Input background color */
+    --ring: 217 91% 65%; /* Ring color for focus states */
 
     --radius: 0.5rem;
 
-    --chart-1: 217 91% 60%; /* Primary Blue */
-    --chart-2: 210 70% 65%; /* Accent Blue */
-    --chart-3: 217 33% 50%; /* Secondary Muted Blue */
-    --chart-4: 210 40% 80%; /* Lighter Greyish Blue */
-    --chart-5: 215 20% 65%; /* Muted Foreground */
+    --chart-1: 217 91% 60%;
+    --chart-2: 210 70% 65%;
+    --chart-3: 190 70% 50%;
+    --chart-4: 30 80% 60%;
+    --chart-5: 0 75% 60%;
 
-    /* Sidebar specific variables */
-    --sidebar-background: 222 47% 9%; /* Even Darker Blue for Sidebar */
-    --sidebar-foreground: 210 40% 90%; /* Sidebar Text Color */
-    --sidebar-primary: 217 91% 60%; /* Sidebar Primary Action Color (same as main) */
-    --sidebar-primary-foreground: 210 40% 98%; /* Sidebar Text on Primary */
-    --sidebar-accent: 210 70% 65%; /* Sidebar Accent Color (Softer Blue, same as main accent) */
-    --sidebar-accent-foreground: 210 40% 98%; /* Sidebar Text on Accent */
-    --sidebar-border: 215 28% 15%; /* Sidebar Border Color */
-    --sidebar-ring: 217 91% 65%; /* Sidebar Ring Color (same as main) */
+    /* Sidebar specific variables - Light Theme */
+    --sidebar-background: 220 20% 96%; /* Very Light Grey, almost white */
+    --sidebar-foreground: 222 47% 20%; /* Dark text for sidebar */
+    --sidebar-primary: 217 91% 55%; /* Sidebar Primary Action Color */
+    --sidebar-primary-foreground: 0 0% 100%; /* Sidebar Text on Primary */
+    --sidebar-accent: 220 15% 92%; /* Sidebar Accent for hover (very light grey) */
+    --sidebar-accent-foreground: 222 47% 15%; /* Darker text for hover */
+    --sidebar-border: 220 15% 85%; /* Sidebar Border Color */
+    --sidebar-ring: 217 91% 60%;
+
+    /* Active Sidebar Item - Light Theme */
+    --sidebar-item-active-background: 220 12% 90%; /* Light grey for active item */
+    --sidebar-item-active-foreground: 217 91% 55%; /* Primary blue text on active item */
+  }
+
+  /* Dark theme variables */
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 47% 14%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 47% 12%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 217 33% 50%; /* Muted Blue */
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 215 28% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 210 70% 65%; /* Softer, Lighter Blue for general accents */
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 215 28% 20%;
+    --input: 215 28% 17%;
+    --ring: 217 91% 65%;
+
+    --chart-1: 217 91% 60%;
+    --chart-2: 210 70% 65%;
+    --chart-3: 217 33% 50%;
+    --chart-4: 210 40% 80%;
+    --chart-5: 215 20% 65%;
+
+    /* Sidebar specific variables - Dark Theme */
+    --sidebar-background: 222 47% 9%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 222 40% 18%; /* Darker grey for hover on sidebar items */
+    --sidebar-accent-foreground: 210 40% 96%; /* Light text for hover */
+    --sidebar-border: 215 28% 15%;
+    --sidebar-ring: 217 91% 65%;
+
+    /* Active Sidebar Item - Dark Theme */
+    --sidebar-item-active-background: 222 40% 22%; /* Distinct slightly lighter grey */
+    --sidebar-item-active-foreground: 210 40% 98%; /* Bright text on active item */
   }
 }
 
@@ -58,6 +114,5 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* font-family removed to allow Geist font from layout.tsx to take precedence */
   }
 }
