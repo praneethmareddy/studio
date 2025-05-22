@@ -2,57 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 @layer base {
   :root {
-    --background: 233 62% 30%; /* Dark Navy #1A237E */
-    --foreground: 0 0% 88%; /* Light Grey #E0E0E0 */
+    --background: 222 47% 11%; /* Dark Desaturated Blue */
+    --foreground: 210 40% 96%; /* Very Light Greyish Blue */
 
-    --card: 233 61% 34%; /* Slightly lighter than background #202B8C */
-    --card-foreground: 0 0% 88%; /* Light Grey #E0E0E0 */
+    --card: 222 47% 14%; /* Slightly Lighter Dark Blue for Card Background */
+    --card-foreground: 210 40% 96%; /* Card Text Color */
 
-    --popover: 233 61% 34%; /* Similar to card */
-    --popover-foreground: 0 0% 88%;
+    --popover: 222 47% 12%; /* Popover Background */
+    --popover-foreground: 210 40% 96%; /* Popover Text Color */
 
-    --primary: 231 53% 37%; /* Deep Blue #283593 */
-    --primary-foreground: 0 0% 98%; /* White */
+    --primary: 217 91% 60%; /* Bright Blue - for primary actions/elements */
+    --primary-foreground: 210 40% 98%; /* Text on Primary elements - Almost White */
 
-    --secondary: 231 53% 45%; /* A slightly lighter deep blue for secondary elements */
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 217 33% 50%; /* Muted Blue - for secondary actions/elements */
+    --secondary-foreground: 210 40% 98%; /* Text on Secondary elements */
 
-    --muted: 233 60% 40%; /* Muted color based on background */
-    --muted-foreground: 0 0% 60%; /* Darker Grey for muted text */
+    --muted: 215 28% 17%; /* Darker Muted Blue - for less prominent elements */
+    --muted-foreground: 215 20% 65%; /* Greyish Blue for muted text */
 
-    --accent: 287 49% 60%; /* Electric Purple #BA68C8 */
-    --accent-foreground: 0 0% 100%; /* White */
+    --accent: 173 90% 40%; /* Vibrant Teal/Cyan - for accents, highlights */
+    --accent-foreground: 210 40% 98%; /* Text on Accent elements */
 
     --destructive: 0 72% 51%; /* Default destructive red */
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 0 0% 98%; /* Text on Destructive elements */
 
-    --border: 233 60% 40%; /* Border color based on background */
-    --input: 233 60% 40%; /* Input background, same as border */
-    --ring: 287 49% 65%; /* Ring color based on accent */
+    --border: 215 28% 20%; /* Subtle border color */
+    --input: 215 28% 17%; /* Input background color */
+    --ring: 217 91% 65%; /* Ring color for focus states, based on primary */
 
     --radius: 0.5rem;
 
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --chart-1: 217 91% 60%; /* Primary Blue */
+    --chart-2: 173 90% 40%; /* Accent Teal */
+    --chart-3: 217 33% 50%; /* Secondary Muted Blue */
+    --chart-4: 210 40% 80%; /* Lighter Greyish Blue */
+    --chart-5: 215 20% 65%; /* Muted Foreground */
 
-    /* Sidebar specific variables (can be kept or adjusted if sidebar is used later) */
-    --sidebar-background: 233 62% 25%; /* Darker than main background */
-    --sidebar-foreground: 0 0% 88%;
-    --sidebar-primary: 231 53% 37%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 287 49% 60%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 233 60% 35%;
-    --sidebar-ring: 287 49% 65%;
+    /* Sidebar specific variables */
+    --sidebar-background: 222 47% 9%; /* Even Darker Blue for Sidebar */
+    --sidebar-foreground: 210 40% 90%; /* Sidebar Text Color */
+    --sidebar-primary: 217 91% 60%; /* Sidebar Primary Action Color (same as main) */
+    --sidebar-primary-foreground: 210 40% 98%; /* Sidebar Text on Primary */
+    --sidebar-accent: 173 90% 40%; /* Sidebar Accent Color (same as main) */
+    --sidebar-accent-foreground: 210 40% 98%; /* Sidebar Text on Accent */
+    --sidebar-border: 215 28% 15%; /* Sidebar Border Color */
+    --sidebar-ring: 217 91% 65%; /* Sidebar Ring Color (same as main) */
   }
 }
 
@@ -62,5 +58,6 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    /* font-family removed to allow Geist font from layout.tsx to take precedence */
   }
 }
