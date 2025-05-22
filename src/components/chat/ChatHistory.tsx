@@ -5,18 +5,36 @@ import type { Message } from '@/lib/types';
 import { ChatMessage } from './ChatMessage';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import React, { useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react'; // For loading indicator
-import { cn } from '@/lib/utils'; // Added missing import
+import { Loader2 } from 'lucide-react'; 
+import { cn } from '@/lib/utils';
 
 interface ChatHistoryProps {
   messages: Message[];
   onEditMessage: (message: Message) => void;
   onDeleteMessage: (messageId: string) => void;
+  onCopyUserMessage: (text: string) => void;
+  onCopyAIMessage: (text: string) => void;
+  onDownloadAIMessage: (messageId: string) => void;
+  onRegenerateAIMessage: (messageId: string) => void;
+  onLikeAIMessage: (messageId: string) => void;
+  onDislikeAIMessage: (messageId: string) => void;
   activeConversationId: string | null;
-  isLoading?: boolean; // Optional: to show loading state for AI response
+  isLoading?: boolean;
 }
 
-export function ChatHistory({ messages, onEditMessage, onDeleteMessage, activeConversationId, isLoading }: ChatHistoryProps) {
+export function ChatHistory({ 
+  messages, 
+  onEditMessage, 
+  onDeleteMessage,
+  onCopyUserMessage,
+  onCopyAIMessage,
+  onDownloadAIMessage,
+  onRegenerateAIMessage,
+  onLikeAIMessage,
+  onDislikeAIMessage,
+  activeConversationId, 
+  isLoading 
+}: ChatHistoryProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -31,12 +49,10 @@ export function ChatHistory({ messages, onEditMessage, onDeleteMessage, activeCo
         viewport.scrollTop = viewport.scrollHeight;
       }
     }
-  }, [messages, isLoading]); // Also scroll when loading changes
+  }, [messages, isLoading]);
 
 
   if (!activeConversationId && messages.length === 0 && !isLoading) {
-    // This state is usually handled by SampleQueries now, but kept as a fallback.
-    // Or if SampleQueries are explicitly not shown.
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground p-4">
         <p>Select a conversation or start a new one to begin chatting.</p>
@@ -53,6 +69,12 @@ export function ChatHistory({ messages, onEditMessage, onDeleteMessage, activeCo
             message={msg}
             onEdit={() => onEditMessage(msg)}
             onDelete={() => onDeleteMessage(msg.id)}
+            onCopyUserMessage={onCopyUserMessage}
+            onCopyAIMessage={(text) => onCopyAIMessage(text)} // AI copy might be specific to message text
+            onDownloadAIMessage={() => onDownloadAIMessage(msg.id)}
+            onRegenerateAIMessage={() => onRegenerateAIMessage(msg.id)}
+            onLikeAIMessage={() => onLikeAIMessage(msg.id)}
+            onDislikeAIMessage={() => onDislikeAIMessage(msg.id)}
           />
         ))}
         <div ref={messagesEndRef} />
@@ -63,7 +85,6 @@ export function ChatHistory({ messages, onEditMessage, onDeleteMessage, activeCo
         )}
         {isLoading && messages.length > 0 && messages[messages.length-1].sender === 'user' && (
           <div className="flex justify-start items-center p-2">
-             {/* Basic AI thinking indicator, similar to ChatMessage for AI */}
             <div className={cn('group/message flex items-start gap-3 my-2 justify-start')}>
               <div className="max-w-[70%] rounded-lg p-3 shadow-md bg-card text-card-foreground rounded-bl-none animate-pulse">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -75,5 +96,3 @@ export function ChatHistory({ messages, onEditMessage, onDeleteMessage, activeCo
     </ScrollArea>
   );
 }
-
-    

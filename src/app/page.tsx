@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp } from 'lucide-react';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   AlertDialog,
@@ -107,7 +107,7 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [toast]); // Removed activeConversationId from deps as it's set inside
+  }, [toast]); 
 
   useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
@@ -136,21 +136,21 @@ export default function ChatPage() {
     setEditingConversation(null); 
     setActiveConversationId(null); 
     setChatInputValue('');
+    setEditingMessage(null); // Clear any ongoing message edit
   };
 
   const handleSelectConversation = (conversationId: string) => {
     setEditingConversation(null); 
     setActiveConversationId(conversationId);
     setChatInputValue('');
+    setEditingMessage(null); // Clear any ongoing message edit
   };
 
   const handleSampleQueryClick = (query: string) => {
     setChatInputValue(query);
-    // Optionally, focus the input after setting the value
-    // chatInputRef.current?.focus(); 
   };
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = useCallback(async (text: string) => {
     if (!text.trim()) return;
 
     const newUserMessage: Message = {
@@ -185,11 +185,9 @@ export default function ChatPage() {
     setChatInputValue('');
 
     try {
-      // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 500));
-      // Echo response logic (replace with actual AI call later)
       const newAiMessage: Message = {
-        id: (Date.now() + 1).toString(), // Ensure unique ID
+        id: (Date.now() + 1).toString(),
         text: `Echo: ${text}`,
         sender: 'ai',
         timestamp: Date.now(),
@@ -211,30 +209,42 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [activeConversationId, conversations, toast]);
 
   const handleStartEditMessage = (message: Message) => {
     setEditingMessage(message);
     setEditingMessageText(message.text);
   };
 
-  const handleSaveEditedMessage = () => {
-    if (!editingMessage || !activeConversationId) return;
-    setConversations(prev => prev.map(conv => 
-      conv.id === activeConversationId 
-        ? {
+  const handleSaveEditedMessage = async () => {
+    if (!editingMessage || !activeConversationId || !editingMessageText.trim()) return;
+  
+    setConversations(prev => {
+      return prev.map(conv => {
+        if (conv.id === activeConversationId) {
+          const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
+          if (messageIndex === -1) return conv; // Should not happen
+  
+          // Truncate messages from the edited message onwards
+          const messagesUpToEdit = conv.messages.slice(0, messageIndex);
+          return {
             ...conv,
-            messages: conv.messages.map(msg => 
-              msg.id === editingMessage.id 
-                ? { ...msg, text: editingMessageText, timestamp: Date.now() } 
-                : msg
-            ),
-          }
-        : conv
-    ));
+            messages: messagesUpToEdit,
+            timestamp: Date.now(), // Update conversation timestamp
+          };
+        }
+        return conv;
+      });
+    });
+  
+    // Send the edited text as a new message
+    // Use a brief timeout to ensure state update for truncation completes before sending
+    await new Promise(resolve => setTimeout(resolve, 0)); 
+    await handleSendMessage(editingMessageText.trim());
+  
     setEditingMessage(null);
     setEditingMessageText('');
-    toast({ title: "Message updated" });
+    toast({ title: "Message edited and resent" });
   };
 
   const handleCancelEditMessage = () => {
@@ -263,6 +273,98 @@ export default function ChatPage() {
     });
   };
 
+  const handleCopyUserMessage = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: "User message copied!",
+        duration: 3000,
+      });
+    } catch (err) {
+      toast({
+        title: "Failed to copy",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleCopyAIMessage = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: "AI response copied!",
+        duration: 3000,
+      });
+    } catch (err) {
+      toast({
+        title: "Failed to copy",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleDownloadAIMessage = (messageId: string) => {
+    const conversation = conversations.find(c => c.id === activeConversationId);
+    const message = conversation?.messages.find(m => m.id === messageId && m.sender === 'ai');
+    if (message) {
+      const blob = new Blob([message.text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ai_response_${message.id}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      toast({ title: "Error", description: "Could not find message to download.", variant: "destructive" });
+    }
+  };
+
+  const handleRegenerateAIMessage = (messageId: string) => {
+    if (!activeConversationId) return;
+  
+    let userPromptForAIMessage = "";
+  
+    setConversations(prev => {
+      return prev.map(conv => {
+        if (conv.id === activeConversationId) {
+          const aiMessageIndex = conv.messages.findIndex(msg => msg.id === messageId && msg.sender === 'ai');
+          if (aiMessageIndex > 0) { // Ensure there's a preceding message
+            userPromptForAIMessage = conv.messages[aiMessageIndex - 1].text;
+            // Remove the AI message and any messages that followed it
+            const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex); 
+            return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
+          }
+        }
+        return conv;
+      });
+    });
+  
+    if (userPromptForAIMessage) {
+       // Use a brief timeout to ensure state update for truncation completes before sending
+      setTimeout(() => {
+        handleSendMessage(userPromptForAIMessage);
+        toast({ title: "Regenerating response..." });
+      }, 0);
+    } else {
+      toast({ title: "Error", description: "Could not find user prompt to regenerate.", variant: "destructive" });
+    }
+  };
+  
+  const handleLikeAIMessage = (messageId: string) => {
+    toast({ title: "Message Liked!", description: `AI Message ID: ${messageId}` });
+    // Placeholder for actual like logic
+  };
+  
+  const handleDislikeAIMessage = (messageId: string) => {
+    toast({ title: "Message Disliked.", description: `AI Message ID: ${messageId}` });
+    // Placeholder for actual dislike logic
+  };
+
+
   const handleStartEditConversationTitle = (conversation: Conversation) => {
     setEditingConversation(conversation);
     setEditingConversationTitleText(conversation.title);
@@ -277,7 +379,7 @@ export default function ChatPage() {
       conv.id === editingConversation.id 
         ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } 
         : conv
-    ).sort((a, b) => b.timestamp - a.timestamp)); // Re-sort after title update potentially affecting order
+    ).sort((a, b) => b.timestamp - a.timestamp));
     setEditingConversation(null);
     setEditingConversationTitleText('');
     toast({ title: "Conversation title updated" });
@@ -294,10 +396,12 @@ export default function ChatPage() {
       title: "Delete Conversation?",
       description: "Are you sure you want to delete this entire conversation? This action cannot be undone.",
       onConfirm: () => {
-        setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+        const newConversations = conversations.filter(conv => conv.id !== conversationId);
+        setConversations(newConversations);
+        
         if (activeConversationId === conversationId) {
-          const remainingConversations = conversations.filter(c => c.id !== conversationId).sort((a,b) => b.timestamp - a.timestamp);
-          setActiveConversationId(remainingConversations.length > 0 ? remainingConversations[0].id : null);
+          const sortedRemaining = [...newConversations].sort((a,b) => b.timestamp - a.timestamp);
+          setActiveConversationId(sortedRemaining.length > 0 ? sortedRemaining[0].id : null);
         }
         toast({ title: "Conversation deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
@@ -310,21 +414,31 @@ export default function ChatPage() {
     return activeConversation.messages.find(m => m.id === editingMessage.id) || null;
   }, [editingMessage, activeConversation]);
 
-  // Show sample queries if no conversation is active OR if the active one has no messages
   const displaySampleQueries = !activeConversation || (activeConversation.messages && activeConversation.messages.length === 0);
 
   return (
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" className="border-r">
-        <SidebarHeader className="border-b">
+        <SidebarHeader className="p-0 border-b border-sidebar-border">
+          <div className="flex h-12 items-center px-3">
+            <SidebarTrigger asChild>
+              <Button variant="ghost" className="h-9 w-auto px-2 group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:px-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                <PanelLeft className="h-[1.2rem] w-[1.2rem]" />
+                <span className="ml-2 text-sm font-medium group-data-[collapsible=icon]:hidden text-muted-foreground">
+                  DeepReact Chat
+                </span>
+                <span className="sr-only group-data-[collapsible=expanded]:hidden">Toggle Sidebar</span>
+              </Button>
+            </SidebarTrigger>
+          </div>
            <div className="p-2">
             <Button
-              variant="default" // Changed to default for primary color (blue)
+              variant="default"
               onClick={handleNewChat}
               className="w-full flex items-center justify-start text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-start"
               title="New Chat"
             >
-              <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" /> {/* Reverted to mx-auto for centering icon in small button, can be adjusted */}
+              <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
               <span className="ml-2 group-data-[collapsible=icon]:hidden">New Chat</span>
               <span className="sr-only group-data-[collapsible=expanded]:hidden">New Chat</span>
             </Button>
@@ -342,7 +456,7 @@ export default function ChatPage() {
                 <SidebarMenuItem 
                   key={conv.id} 
                   className="group/conv-item flex items-center justify-between"
-                  isActive={conv.id === activeConversationId} // Pass isActive to SidebarMenuItem
+                  isActive={conv.id === activeConversationId}
                 >
                   {editingConversation?.id === conv.id ? (
                     <div className="flex items-center gap-2 p-1 w-full">
@@ -363,13 +477,11 @@ export default function ChatPage() {
                   ) : (
                     <>
                       <SidebarMenuButton
-                        // isActive prop removed, parent SidebarMenuItem handles active state styling
                         onClick={() => handleSelectConversation(conv.id)}
                         tooltip={{ children: conv.title, side: 'right', align: 'center' }}
                         className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center"
                       >
                         <div className="flex items-center gap-2 overflow-hidden">
-                           {/* Ensure text color contrasts with active background if needed */}
                           <MessageSquare size={18} className="text-muted-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
                           <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
                         </div>
@@ -382,7 +494,7 @@ export default function ChatPage() {
                               variant="ghost" 
                               size="icon" 
                               className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[[data-active=true]]/conv-item:hover:text-inherit/80"
-                              onClick={(e) => e.stopPropagation()} // Prevent conversation selection
+                              onClick={(e) => e.stopPropagation()} 
                             >
                               <MoreHorizontal size={16} />
                             </Button>
@@ -410,16 +522,16 @@ export default function ChatPage() {
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
             <div className="flex items-center">
-              <SidebarTrigger className="mr-2 text-muted-foreground hover:text-foreground" /> 
+              {/* SidebarTrigger removed from here as it's now in SidebarHeader */}
               <ChatLogo className="h-8 w-8 text-primary mr-3" />
               <h1 className="text-xl font-semibold text-foreground">DeepReact Chat</h1>
             </div>
             <ThemeToggleButton />
           </header>
           <main className="flex-1 overflow-hidden">
-             {currentEditingMessage && activeConversationId ? (
+             {editingMessage && activeConversationId ? (
                 <div className="p-4 border-t border-border bg-card">
-                  <h3 className="text-sm font-semibold mb-2 text-card-foreground">Editing message:</h3>
+                  <h3 className="text-sm font-semibold mb-2 text-card-foreground">Edit and resend message:</h3>
                   <Textarea
                     value={editingMessageText}
                     onChange={(e) => setEditingMessageText(e.target.value)}
@@ -429,7 +541,7 @@ export default function ChatPage() {
                   />
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={handleCancelEditMessage} size="sm">Cancel</Button>
-                    <Button onClick={handleSaveEditedMessage} size="sm">Save Changes</Button>
+                    <Button onClick={handleSaveEditedMessage} size="sm">Save & Resend</Button>
                   </div>
                 </div>
               ) : displaySampleQueries && !isLoading ? (
@@ -442,6 +554,12 @@ export default function ChatPage() {
                     messages={activeConversation?.messages || []}
                     onEditMessage={handleStartEditMessage}
                     onDeleteMessage={handleDeleteMessage}
+                    onCopyUserMessage={handleCopyUserMessage}
+                    onCopyAIMessage={(text) => handleCopyAIMessage(text)}
+                    onDownloadAIMessage={(messageId) => handleDownloadAIMessage(messageId)}
+                    onRegenerateAIMessage={(messageId) => handleRegenerateAIMessage(messageId)}
+                    onLikeAIMessage={(messageId) => handleLikeAIMessage(messageId)}
+                    onDislikeAIMessage={(messageId) => handleDislikeAIMessage(messageId)}
                     activeConversationId={activeConversationId}
                     isLoading={isLoading}
                  />
