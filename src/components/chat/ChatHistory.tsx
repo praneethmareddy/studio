@@ -6,6 +6,7 @@ import { ChatMessage } from './ChatMessage';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import React, { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react'; // For loading indicator
+import { cn } from '@/lib/utils'; // Added missing import
 
 interface ChatHistoryProps {
   messages: Message[];
