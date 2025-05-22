@@ -46,6 +46,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
+import { isToday, isYesterday, subDays, format, differenceInDays } from 'date-fns';
 
 const CONVERSATIONS_STORAGE_KEY = 'deepReactConversations';
 
@@ -64,6 +65,43 @@ type AlertDialogState = {
   confirmText?: string;
   cancelText?: string;
 };
+
+interface GroupedConversations {
+  [groupTitle: string]: Conversation[];
+}
+
+const groupConversations = (conversations: Conversation[]): GroupedConversations => {
+  const finalGroups: GroupedConversations = {};
+  const now = new Date();
+
+  // Sort conversations by timestamp descending before grouping
+  const sortedConversations = [...conversations].sort((a, b) => b.timestamp - a.timestamp);
+
+  sortedConversations.forEach(conv => {
+    const convDate = new Date(conv.timestamp);
+    let groupKey = '';
+
+    if (isToday(convDate)) {
+      groupKey = 'Today';
+    } else if (isYesterday(convDate)) {
+      groupKey = 'Yesterday';
+    } else if (differenceInDays(now, convDate) < 7) {
+      groupKey = 'Previous 7 Days';
+    } else if (differenceInDays(now, convDate) < 30) {
+      groupKey = 'Previous 30 Days';
+    } else {
+      groupKey = format(convDate, 'MMMM yyyy'); // e.g., April 2024
+    }
+    
+    if (!finalGroups[groupKey]) {
+      finalGroups[groupKey] = [];
+    }
+    // Since conversations are already sorted, pushing them maintains order within the group
+    finalGroups[groupKey].push(conv); 
+  });
+  return finalGroups;
+};
+
 
 export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -92,10 +130,12 @@ export default function ChatPage() {
       if (storedConversations) {
         const loadedConversations: Conversation[] = JSON.parse(storedConversations);
         if (loadedConversations.length > 0) {
-          const sorted = [...loadedConversations].sort((a, b) => b.timestamp - a.timestamp);
-          setConversations(sorted);
-          if (sorted.length > 0 && !activeConversationId) {
-            setActiveConversationId(sorted[0].id);
+          // No need to sort here, will be sorted by groupConversations or when displayed
+          setConversations(loadedConversations); 
+          if (!activeConversationId && loadedConversations.length > 0) {
+            // Set active to the most recent conversation globally
+            const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
+             setActiveConversationId(mostRecent.id);
           }
         }
       }
@@ -107,7 +147,7 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [toast]); 
+  }, [toast]); // Removed activeConversationId dependency to prevent re-triggering on selection
 
   useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
@@ -128,22 +168,51 @@ export default function ChatPage() {
     return conversations.find(conv => conv.id === activeConversationId);
   }, [conversations, activeConversationId]);
 
-  const sortedConversations = useMemo(() => {
-    return [...conversations].sort((a, b) => b.timestamp - a.timestamp);
+  const groupedAndSortedConversations = useMemo(() => {
+    const grouped = groupConversations(conversations);
+    const groupOrder = ['Today', 'Yesterday', 'Previous 7 Days', 'Previous 30 Days'];
+    
+    const orderedGroups: { title: string; conversations: Conversation[] }[] = [];
+
+    // Add predefined groups in order if they exist and have items
+    groupOrder.forEach(key => {
+      if (grouped[key] && grouped[key].length > 0) {
+        orderedGroups.push({ title: key, conversations: grouped[key] });
+      }
+    });
+
+    // Add monthly groups, sorted newest month first
+    const monthlyGroupKeys = Object.keys(grouped)
+      .filter(key => !groupOrder.includes(key))
+      .sort((a, b) => {
+        // Assuming 'MMMM yyyy' format, convert to Date for sorting
+        const dateA = new Date(`01 ${a}`); // format() output 'April 2024' needs day for Date
+        const dateB = new Date(`01 ${b}`);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+    monthlyGroupKeys.forEach(key => {
+      if (grouped[key] && grouped[key].length > 0) {
+        orderedGroups.push({ title: key, conversations: grouped[key] });
+      }
+    });
+    
+    return orderedGroups;
   }, [conversations]);
+
 
   const handleNewChat = () => {
     setEditingConversation(null); 
     setActiveConversationId(null); 
     setChatInputValue('');
-    setEditingMessage(null); // Clear any ongoing message edit
+    setEditingMessage(null); 
   };
 
   const handleSelectConversation = (conversationId: string) => {
     setEditingConversation(null); 
     setActiveConversationId(conversationId);
     setChatInputValue('');
-    setEditingMessage(null); // Clear any ongoing message edit
+    setEditingMessage(null); 
   };
 
   const handleSampleQueryClick = (query: string) => {
@@ -167,7 +236,7 @@ export default function ChatPage() {
     if (!currentConversationId) {
       const newConversation: Conversation = {
         id: Date.now().toString(),
-        title: text.substring(0, 20) + (text.length > 20 ? '...' : ''), // Adjusted to 20 chars
+        title: text.substring(0, 20) + (text.length > 20 ? '...' : ''),
         timestamp: Date.now(),
         messages: [newUserMessage],
       };
@@ -181,7 +250,8 @@ export default function ChatPage() {
           : conv
       );
     }
-    setConversations(updatedConversations.sort((a, b) => b.timestamp - a.timestamp));
+    // No sort here, will be naturally at top or handled by grouping
+    setConversations(updatedConversations); 
     setChatInputValue('');
 
     try {
@@ -197,7 +267,7 @@ export default function ChatPage() {
           conv.id === currentConversationId
             ? { ...conv, messages: [...conv.messages, newAiMessage], timestamp: Date.now() }
             : conv
-        ).sort((a, b) => b.timestamp - a.timestamp)
+        )
       );
     } catch (error) {
       console.error('Error generating echo response:', error);
@@ -228,7 +298,7 @@ export default function ChatPage() {
           const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
-            messages: messagesUpToEdit,
+            messages: messagesUpToEdit, // Remove messages from the edited one onwards
             timestamp: Date.now(), 
           };
         }
@@ -236,8 +306,9 @@ export default function ChatPage() {
       });
     });
   
+    // Ensure state update is processed before sending the new message
     await new Promise(resolve => setTimeout(resolve, 0)); 
-    await handleSendMessage(editingMessageText.trim());
+    await handleSendMessage(editingMessageText.trim()); // Send the edited text as a new message
   
     setEditingMessage(null);
     setEditingMessageText('');
@@ -261,6 +332,7 @@ export default function ChatPage() {
             ? {
                 ...conv,
                 messages: conv.messages.filter(msg => msg.id !== messageId),
+                 timestamp: Date.now() // Update timestamp if messages change
               }
             : conv
         ));
@@ -329,8 +401,10 @@ export default function ChatPage() {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const aiMessageIndex = conv.messages.findIndex(msg => msg.id === messageId && msg.sender === 'ai');
-          if (aiMessageIndex > 0) { 
+          // Ensure there's a user message before the AI message to regenerate from
+          if (aiMessageIndex > 0 && conv.messages[aiMessageIndex - 1].sender === 'user') { 
             userPromptForAIMessage = conv.messages[aiMessageIndex - 1].text;
+            // Remove the AI message and any subsequent messages
             const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex); 
             return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
           }
@@ -340,6 +414,7 @@ export default function ChatPage() {
     });
   
     if (userPromptForAIMessage) {
+      // Use a timeout to ensure state updates before calling handleSendMessage
       setTimeout(() => {
         handleSendMessage(userPromptForAIMessage);
         toast({ title: "Regenerating response..." });
@@ -371,7 +446,7 @@ export default function ChatPage() {
       conv.id === editingConversation.id 
         ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } 
         : conv
-    ).sort((a, b) => b.timestamp - a.timestamp));
+    )); // Sorting happens in useMemo for display
     setEditingConversation(null);
     setEditingConversationTitleText('');
     toast({ title: "Conversation title updated" });
@@ -407,20 +482,18 @@ export default function ChatPage() {
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" className="border-r">
         <SidebarHeader className="p-0 border-b border-sidebar-border">
-          <div className="flex h-12 items-center justify-between px-3"> {/* Ensure padding and height for proper alignment */}
+          <div className="flex items-center h-14 px-3"> {/* Adjusted height and padding */}
             <SidebarTrigger asChild>
               <Button
                 variant="ghost"
-                className="h-9 w-auto px-2 group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 text-sidebar-foreground hover:bg-sidebar-accent focus-visible:ring-sidebar-ring"
+                className="flex-grow justify-start h-auto py-2 px-2 text-sidebar-foreground hover:bg-sidebar-accent focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
               >
-                {/* Expanded: Text then Icon */}
                 <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
                   <span className="text-sm font-medium text-muted-foreground whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:opacity-0">
                     DeepReact Chat
                   </span>
                   <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
                 </div>
-                {/* Collapsed: Icon only */}
                 <div className="hidden items-center justify-center group-data-[collapsible=icon]:flex">
                   <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
                 </div>
@@ -445,72 +518,81 @@ export default function ChatPage() {
         </SidebarHeader>
         <SidebarContent className="p-0">
           <ScrollArea className="h-full">
-            {sortedConversations.length === 0 && (
+            {conversations.length === 0 && (
               <div className="p-4 text-center text-muted-foreground group-data-[collapsible=icon]:hidden">
                 No chats yet. Start a new one!
               </div>
             )}
-            <SidebarMenu className="p-2">
-              {sortedConversations.map(conv => (
-                <SidebarMenuItem 
-                  key={conv.id} 
-                  className="group/conv-item flex items-center justify-between"
-                  isActive={conv.id === activeConversationId}
-                >
-                  {editingConversation?.id === conv.id ? (
-                    <div className="flex items-center gap-2 p-1 w-full">
-                      <Input 
-                        type="text" 
-                        value={editingConversationTitleText}
-                        onChange={(e) => setEditingConversationTitleText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEditedConversationTitle();
-                          if (e.key === 'Escape') handleCancelEditConversationTitle();
-                        }}
-                        className="h-8 flex-grow bg-input text-foreground border-border focus:ring-ring"
-                        autoFocus
-                      />
-                      <Button variant="ghost" size="icon" onClick={handleSaveEditedConversationTitle} className="h-8 w-8 text-primary hover:text-primary/80"><Save size={16}/></Button>
-                      <Button variant="ghost" size="icon" onClick={handleCancelEditConversationTitle} className="h-8 w-8 text-destructive hover:text-destructive/80"><X size={16}/></Button>
-                    </div>
-                  ) : (
-                    <>
-                      <SidebarMenuButton
-                        onClick={() => handleSelectConversation(conv.id)}
-                        tooltip={{ children: conv.title, side: 'right', align: 'center' }}
-                        className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center"
-                      >
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <MessageSquare size={18} className="text-muted-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
-                          <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
-                        </div>
-                      </SidebarMenuButton>
-                      
-                      <div className="flex-shrink-0 group-data-[collapsible=icon]:hidden">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[[data-active=true]]/conv-item:hover:text-inherit/80"
-                              onClick={(e) => e.stopPropagation()} 
-                            >
-                              <MoreHorizontal size={16} />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start">
-                            <DropdownMenuItem onClick={() => handleStartEditConversationTitle(conv)}>
-                              <Pencil size={14} className="mr-2" /> Edit Title
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)} className="text-destructive hover:!text-destructive focus:!text-destructive focus-visible:!text-destructive">
-                              <Trash2 size={14} className="mr-2" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </>
+            <SidebarMenu className="p-2 space-y-1">
+              {groupedAndSortedConversations.map(group => (
+                <div key={group.title}>
+                  {group.conversations.length > 0 && (
+                     <div className="px-3 py-2 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">
+                       {group.title}
+                     </div>
                   )}
-                </SidebarMenuItem>
+                  {group.conversations.map(conv => (
+                    <SidebarMenuItem 
+                      key={conv.id} 
+                      isActive={conv.id === activeConversationId}
+                      className="group/conv-item flex items-center justify-between flex-nowrap" // Added flex-nowrap
+                    >
+                      {editingConversation?.id === conv.id ? (
+                        <div className="flex items-center gap-2 p-1 w-full">
+                          <Input 
+                            type="text" 
+                            value={editingConversationTitleText}
+                            onChange={(e) => setEditingConversationTitleText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveEditedConversationTitle();
+                              if (e.key === 'Escape') handleCancelEditConversationTitle();
+                            }}
+                            className="h-8 flex-grow bg-input text-foreground border-border focus:ring-ring"
+                            autoFocus
+                          />
+                          <Button variant="ghost" size="icon" onClick={handleSaveEditedConversationTitle} className="h-8 w-8 text-primary hover:text-primary/80"><Save size={16}/></Button>
+                          <Button variant="ghost" size="icon" onClick={handleCancelEditConversationTitle} className="h-8 w-8 text-destructive hover:text-destructive/80"><X size={16}/></Button>
+                        </div>
+                      ) : (
+                        <>
+                          <SidebarMenuButton
+                            onClick={() => handleSelectConversation(conv.id)}
+                            tooltip={{ children: conv.title, side: 'right', align: 'center' }}
+                            className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center min-w-0" // Added min-w-0
+                          >
+                            <div className="flex items-center gap-2 overflow-hidden"> {/* This div should allow its children to truncate */}
+                              <MessageSquare size={18} className="text-muted-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
+                              <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
+                            </div>
+                          </SidebarMenuButton>
+                          
+                          <div className="flex-shrink-0 group-data-[collapsible=icon]:hidden">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[[data-active=true]]/conv-item:hover:text-inherit/80"
+                                  onClick={(e) => e.stopPropagation()} 
+                                >
+                                  <MoreHorizontal size={16} />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start">
+                                <DropdownMenuItem onClick={() => handleStartEditConversationTitle(conv)}>
+                                  <Pencil size={14} className="mr-2" /> Edit Title
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)} className="text-destructive hover:!text-destructive focus:!text-destructive focus-visible:!text-destructive">
+                                  <Trash2 size={14} className="mr-2" /> Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </>
+                      )}
+                    </SidebarMenuItem>
+                  ))}
+                </div>
               ))}
             </SidebarMenu>
           </ScrollArea>
@@ -553,11 +635,11 @@ export default function ChatPage() {
                     onEditMessage={handleStartEditMessage}
                     onDeleteMessage={handleDeleteMessage}
                     onCopyUserMessage={handleCopyUserMessage}
-                    onCopyAIMessage={(text) => handleCopyAIMessage(text)}
-                    onDownloadAIMessage={(messageId) => handleDownloadAIMessage(messageId)}
-                    onRegenerateAIMessage={(messageId) => handleRegenerateAIMessage(messageId)}
-                    onLikeAIMessage={(messageId) => handleLikeAIMessage(messageId)}
-                    onDislikeAIMessage={(messageId) => handleDislikeAIMessage(messageId)}
+                    onCopyAIMessage={handleCopyAIMessage}
+                    onDownloadAIMessage={handleDownloadAIMessage}
+                    onRegenerateAIMessage={handleRegenerateAIMessage}
+                    onLikeAIMessage={handleLikeAIMessage}
+                    onDislikeAIMessage={handleDislikeAIMessage}
                     activeConversationId={activeConversationId}
                     isLoading={isLoading}
                  />
@@ -595,3 +677,4 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
+
