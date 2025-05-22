@@ -130,10 +130,8 @@ export default function ChatPage() {
       if (storedConversations) {
         const loadedConversations: Conversation[] = JSON.parse(storedConversations);
         if (loadedConversations.length > 0) {
-          // No need to sort here, will be sorted by groupConversations or when displayed
           setConversations(loadedConversations); 
           if (!activeConversationId && loadedConversations.length > 0) {
-            // Set active to the most recent conversation globally
             const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
              setActiveConversationId(mostRecent.id);
           }
@@ -147,7 +145,7 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [toast]); // Removed activeConversationId dependency to prevent re-triggering on selection
+  }, [toast]); 
 
   useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
@@ -174,19 +172,16 @@ export default function ChatPage() {
     
     const orderedGroups: { title: string; conversations: Conversation[] }[] = [];
 
-    // Add predefined groups in order if they exist and have items
     groupOrder.forEach(key => {
       if (grouped[key] && grouped[key].length > 0) {
         orderedGroups.push({ title: key, conversations: grouped[key] });
       }
     });
 
-    // Add monthly groups, sorted newest month first
     const monthlyGroupKeys = Object.keys(grouped)
       .filter(key => !groupOrder.includes(key))
       .sort((a, b) => {
-        // Assuming 'MMMM yyyy' format, convert to Date for sorting
-        const dateA = new Date(`01 ${a}`); // format() output 'April 2024' needs day for Date
+        const dateA = new Date(`01 ${a}`); 
         const dateB = new Date(`01 ${b}`);
         return dateB.getTime() - dateA.getTime();
       });
@@ -250,18 +245,21 @@ export default function ChatPage() {
           : conv
       );
     }
-    // No sort here, will be naturally at top or handled by grouping
     setConversations(updatedConversations); 
     setChatInputValue('');
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 500)); 
+      
+      // Echo response for testing
       const newAiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: `Echo: ${text}`,
+        id: (Date.now() + 1).toString(), // Ensure unique ID
+        text: `Echo: ${text}\n\nThis is a **bold** and *italic* example.\n\`\`\`javascript\nconsole.log("Hello from AI!");\n\`\`\`\n- Item 1\n- Item 2`, // Example markdown
         sender: 'ai',
         timestamp: Date.now(),
       };
+
       setConversations(prevConvs =>
         prevConvs.map(conv =>
           conv.id === currentConversationId
@@ -298,7 +296,7 @@ export default function ChatPage() {
           const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
-            messages: messagesUpToEdit, // Remove messages from the edited one onwards
+            messages: messagesUpToEdit, 
             timestamp: Date.now(), 
           };
         }
@@ -306,9 +304,8 @@ export default function ChatPage() {
       });
     });
   
-    // Ensure state update is processed before sending the new message
     await new Promise(resolve => setTimeout(resolve, 0)); 
-    await handleSendMessage(editingMessageText.trim()); // Send the edited text as a new message
+    await handleSendMessage(editingMessageText.trim()); 
   
     setEditingMessage(null);
     setEditingMessageText('');
@@ -332,7 +329,7 @@ export default function ChatPage() {
             ? {
                 ...conv,
                 messages: conv.messages.filter(msg => msg.id !== messageId),
-                 timestamp: Date.now() // Update timestamp if messages change
+                 timestamp: Date.now() 
               }
             : conv
         ));
@@ -401,10 +398,8 @@ export default function ChatPage() {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const aiMessageIndex = conv.messages.findIndex(msg => msg.id === messageId && msg.sender === 'ai');
-          // Ensure there's a user message before the AI message to regenerate from
           if (aiMessageIndex > 0 && conv.messages[aiMessageIndex - 1].sender === 'user') { 
             userPromptForAIMessage = conv.messages[aiMessageIndex - 1].text;
-            // Remove the AI message and any subsequent messages
             const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex); 
             return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
           }
@@ -414,7 +409,6 @@ export default function ChatPage() {
     });
   
     if (userPromptForAIMessage) {
-      // Use a timeout to ensure state updates before calling handleSendMessage
       setTimeout(() => {
         handleSendMessage(userPromptForAIMessage);
         toast({ title: "Regenerating response..." });
@@ -446,7 +440,7 @@ export default function ChatPage() {
       conv.id === editingConversation.id 
         ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } 
         : conv
-    )); // Sorting happens in useMemo for display
+    ));
     setEditingConversation(null);
     setEditingConversationTitleText('');
     toast({ title: "Conversation title updated" });
@@ -482,7 +476,7 @@ export default function ChatPage() {
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" className="border-r">
         <SidebarHeader className="p-0 border-b border-sidebar-border">
-          <div className="flex items-center h-14 px-3"> {/* Adjusted height and padding */}
+          <div className="flex items-center h-14 px-3">
             <SidebarTrigger asChild>
               <Button
                 variant="ghost"
@@ -535,10 +529,10 @@ export default function ChatPage() {
                     <SidebarMenuItem 
                       key={conv.id} 
                       isActive={conv.id === activeConversationId}
-                      className="group/conv-item flex items-center justify-between flex-nowrap" // Added flex-nowrap
+                      className="group/conv-item flex items-center justify-between flex-nowrap" 
                     >
                       {editingConversation?.id === conv.id ? (
-                        <div className="flex items-center gap-2 p-1 w-full">
+                        <div className="flex items-center gap-2 px-2 py-1 w-full">
                           <Input 
                             type="text" 
                             value={editingConversationTitleText}
@@ -558,9 +552,9 @@ export default function ChatPage() {
                           <SidebarMenuButton
                             onClick={() => handleSelectConversation(conv.id)}
                             tooltip={{ children: conv.title, side: 'right', align: 'center' }}
-                            className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center min-w-0" // Added min-w-0
+                            className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center min-w-0" 
                           >
-                            <div className="flex items-center gap-2 overflow-hidden"> {/* This div should allow its children to truncate */}
+                            <div className="flex items-center gap-2 overflow-hidden"> 
                               <MessageSquare size={18} className="text-muted-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
                               <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
                             </div>
