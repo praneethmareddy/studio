@@ -7,8 +7,9 @@ import type { Message, Conversation } from '@/lib/types';
 import { ChatHistory } from '@/components/chat/ChatHistory';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { ChatLogo } from '@/components/icons/ChatLogo';
-import { summarizeChatHistory } from '@/ai/flows/summarize-chat-history';
-import { generateResponse } from '@/ai/flows/generate-response';
+// import { summarizeChatHistory } from '@/ai/flows/summarize-chat-history'; // Commented out for echo response
+// import { generateResponse } from '@/ai/flows/generate-response'; // Commented out for echo response
+import { SampleQueries } from '@/components/sample-queries/SampleQueries'; // New import
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -25,7 +26,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
@@ -43,12 +43,19 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarRail, 
+  SidebarRail,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
 const CONVERSATIONS_STORAGE_KEY = 'deepReactConversations';
+
+const sampleQueriesList = [
+  "What's the weather like today?",
+  "Explain quantum computing in simple terms.",
+  "Suggest a good recipe for pasta.",
+  "Tell me a fun fact about space.",
+];
 
 type AlertDialogState = {
   isOpen: boolean;
@@ -71,6 +78,8 @@ export default function ChatPage() {
   const [editingConversation, setEditingConversation] = useState<Conversation | null>(null);
   const [editingConversationTitleText, setEditingConversationTitleText] = useState<string>('');
   
+  const [chatInputValue, setChatInputValue] = useState(''); // New state for controlled ChatInput
+
   const [alertDialogState, setAlertDialogState] = useState<AlertDialogState>({
     isOpen: false,
     title: '',
@@ -78,7 +87,6 @@ export default function ChatPage() {
     onConfirm: () => {},
   });
 
-  // Load conversations from localStorage on initial render
   useEffect(() => {
     try {
       const storedConversations = localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
@@ -100,9 +108,8 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [toast]); 
+  }, [toast]); // activeConversationId removed from deps to prevent resetting on new chat
 
-  // Save conversations to localStorage whenever they change
   useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
       try {
@@ -127,16 +134,24 @@ export default function ChatPage() {
   }, [conversations]);
 
   const handleNewChat = () => {
-    setEditingConversation(null); // Cancel any title edit
+    setEditingConversation(null); 
     setActiveConversationId(null); 
+    setChatInputValue(''); // Clear input for new chat
   };
 
   const handleSelectConversation = (conversationId: string) => {
-    setEditingConversation(null); // Cancel any title edit
+    setEditingConversation(null); 
     setActiveConversationId(conversationId);
+    setChatInputValue(''); // Clear input when switching conversations
+  };
+
+  const handleSampleQueryClick = (query: string) => {
+    setChatInputValue(query);
   };
 
   const handleSendMessage = async (text: string) => {
+    if (!text.trim()) return; // Ensure text is not empty after trim
+
     const newUserMessage: Message = {
       id: Date.now().toString(),
       text,
@@ -166,7 +181,40 @@ export default function ChatPage() {
       );
     }
     setConversations(updatedConversations.sort((a, b) => b.timestamp - a.timestamp));
+    setChatInputValue(''); // Clear input after sending
 
+    // Simplified AI response for testing: Echo the user's message
+    try {
+      // Simulate AI thinking time
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const newAiMessage: Message = {
+        id: (Date.now() + 1).toString(), // Ensure unique ID
+        text: `Echo: ${text}`, // AI echoes the user's message
+        sender: 'ai',
+        timestamp: Date.now(),
+      };
+
+      setConversations(prevConvs =>
+        prevConvs.map(conv =>
+          conv.id === currentConversationId
+            ? { ...conv, messages: [...conv.messages, newAiMessage], timestamp: Date.now() }
+            : conv
+        ).sort((a, b) => b.timestamp - a.timestamp)
+      );
+
+    } catch (error) {
+      console.error('Error generating echo response:', error); // Should not happen with echo
+      toast({
+        title: "Echo Error",
+        description: "Sorry, I couldn't generate an echo response.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+
+    /* // Original AI interaction logic - commented out for echo testing
     try {
       const conversationForAI = updatedConversations.find(c => c.id === currentConversationId);
       if (!conversationForAI) throw new Error("Active conversation not found");
@@ -226,9 +274,9 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
     }
+    */
   };
 
-  // --- Message CRUD ---
   const handleStartEditMessage = (message: Message) => {
     setEditingMessage(message);
     setEditingMessageText(message.text);
@@ -279,7 +327,6 @@ export default function ChatPage() {
     });
   };
 
-  // --- Conversation CRUD ---
   const handleStartEditConversationTitle = (conversation: Conversation) => {
     setEditingConversation(conversation);
     setEditingConversationTitleText(conversation.title);
@@ -327,6 +374,8 @@ export default function ChatPage() {
     return activeConversation.messages.find(m => m.id === editingMessage.id) || null;
   }, [editingMessage, activeConversation]);
 
+  // Determine if sample queries should be displayed
+  const displaySampleQueries = !activeConversation || (activeConversation.messages && activeConversation.messages.length === 0);
 
   return (
     <SidebarProvider>
@@ -432,20 +481,32 @@ export default function ChatPage() {
                     <Button onClick={handleSaveEditedMessage} size="sm">Save Changes</Button>
                   </div>
                 </div>
+              ) : displaySampleQueries && !isLoading ? (
+                <SampleQueries 
+                  queries={sampleQueriesList} 
+                  onQueryClick={handleSampleQueryClick} 
+                />
               ) : (
                  <ChatHistory
                     messages={activeConversation?.messages || []}
                     onEditMessage={handleStartEditMessage}
                     onDeleteMessage={handleDeleteMessage}
                     activeConversationId={activeConversationId}
+                    isLoading={isLoading} // Pass isLoading
                  />
               )}
           </main>
-          {!editingMessage && <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />}
+          {!editingMessage && (
+            <ChatInput 
+              value={chatInputValue}
+              onValueChange={setChatInputValue}
+              onSendMessage={handleSendMessage} 
+              isLoading={isLoading} 
+            />
+          )}
         </div>
       </SidebarInset>
 
-      {/* Alert Dialog for confirmations */}
       <AlertDialog open={alertDialogState.isOpen} onOpenChange={(isOpen) => setAlertDialogState(prev => ({...prev, isOpen}))}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -467,3 +528,5 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
+
+    
