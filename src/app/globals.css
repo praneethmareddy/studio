@@ -22,7 +22,7 @@
     --muted: 215 28% 17%; /* Darker Muted Blue - for less prominent elements */
     --muted-foreground: 215 20% 65%; /* Greyish Blue for muted text */
 
-    --accent: 173 90% 40%; /* Vibrant Teal/Cyan - for accents, highlights */
+    --accent: 210 70% 65%; /* Softer, Lighter Blue - for accents, highlights */
     --accent-foreground: 210 40% 98%; /* Text on Accent elements */
 
     --destructive: 0 72% 51%; /* Default destructive red */
@@ -35,7 +35,7 @@
     --radius: 0.5rem;
 
     --chart-1: 217 91% 60%; /* Primary Blue */
-    --chart-2: 173 90% 40%; /* Accent Teal */
+    --chart-2: 210 70% 65%; /* Accent Blue */
     --chart-3: 217 33% 50%; /* Secondary Muted Blue */
     --chart-4: 210 40% 80%; /* Lighter Greyish Blue */
     --chart-5: 215 20% 65%; /* Muted Foreground */
@@ -45,7 +45,7 @@
     --sidebar-foreground: 210 40% 90%; /* Sidebar Text Color */
     --sidebar-primary: 217 91% 60%; /* Sidebar Primary Action Color (same as main) */
     --sidebar-primary-foreground: 210 40% 98%; /* Sidebar Text on Primary */
-    --sidebar-accent: 173 90% 40%; /* Sidebar Accent Color (same as main) */
+    --sidebar-accent: 210 70% 65%; /* Sidebar Accent Color (Softer Blue, same as main accent) */
     --sidebar-accent-foreground: 210 40% 98%; /* Sidebar Text on Accent */
     --sidebar-border: 215 28% 15%; /* Sidebar Border Color */
     --sidebar-ring: 217 91% 65%; /* Sidebar Ring Color (same as main) */

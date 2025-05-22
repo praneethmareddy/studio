@@ -43,6 +43,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarRail, // Added SidebarRail
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
@@ -366,7 +367,7 @@ export default function ChatPage() {
                         className="h-8 flex-grow"
                         autoFocus
                       />
-                      <Button variant="ghost" size="icon" onClick={handleSaveEditedConversationTitle} className="h-8 w-8 text-green-500 hover:text-green-400"><Save size={16}/></Button>
+                      <Button variant="ghost" size="icon" onClick={handleSaveEditedConversationTitle} className="h-8 w-8 text-primary hover:text-primary/80"><Save size={16}/></Button>
                       <Button variant="ghost" size="icon" onClick={handleCancelEditConversationTitle} className="h-8 w-8 text-red-500 hover:text-red-400"><X size={16}/></Button>
                     </div>
                   ) : (
@@ -403,6 +404,7 @@ export default function ChatPage() {
           </ScrollArea>
         </SidebarContent>
       </Sidebar>
+      <SidebarRail /> {/* Added SidebarRail for desktop toggle */}
       <SidebarInset className="flex flex-col !p-0">
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center p-4 shadow-md">
