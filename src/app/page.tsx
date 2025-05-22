@@ -167,7 +167,7 @@ export default function ChatPage() {
     if (!currentConversationId) {
       const newConversation: Conversation = {
         id: Date.now().toString(),
-        title: text.substring(0, 30) + (text.length > 30 ? '...' : ''),
+        title: text.substring(0, 20) + (text.length > 20 ? '...' : ''), // Adjusted to 20 chars
         timestamp: Date.now(),
         messages: [newUserMessage],
       };
@@ -223,22 +223,19 @@ export default function ChatPage() {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
-          if (messageIndex === -1) return conv; // Should not happen
+          if (messageIndex === -1) return conv; 
   
-          // Truncate messages from the edited message onwards
           const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
             messages: messagesUpToEdit,
-            timestamp: Date.now(), // Update conversation timestamp
+            timestamp: Date.now(), 
           };
         }
         return conv;
       });
     });
   
-    // Send the edited text as a new message
-    // Use a brief timeout to ensure state update for truncation completes before sending
     await new Promise(resolve => setTimeout(resolve, 0)); 
     await handleSendMessage(editingMessageText.trim());
   
@@ -332,9 +329,8 @@ export default function ChatPage() {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const aiMessageIndex = conv.messages.findIndex(msg => msg.id === messageId && msg.sender === 'ai');
-          if (aiMessageIndex > 0) { // Ensure there's a preceding message
+          if (aiMessageIndex > 0) { 
             userPromptForAIMessage = conv.messages[aiMessageIndex - 1].text;
-            // Remove the AI message and any messages that followed it
             const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex); 
             return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
           }
@@ -344,7 +340,6 @@ export default function ChatPage() {
     });
   
     if (userPromptForAIMessage) {
-       // Use a brief timeout to ensure state update for truncation completes before sending
       setTimeout(() => {
         handleSendMessage(userPromptForAIMessage);
         toast({ title: "Regenerating response..." });
@@ -356,14 +351,11 @@ export default function ChatPage() {
   
   const handleLikeAIMessage = (messageId: string) => {
     toast({ title: "Message Liked!", description: `AI Message ID: ${messageId}` });
-    // Placeholder for actual like logic
   };
   
   const handleDislikeAIMessage = (messageId: string) => {
     toast({ title: "Message Disliked.", description: `AI Message ID: ${messageId}` });
-    // Placeholder for actual dislike logic
   };
-
 
   const handleStartEditConversationTitle = (conversation: Conversation) => {
     setEditingConversation(conversation);
@@ -409,25 +401,30 @@ export default function ChatPage() {
     });
   };
 
-  const currentEditingMessage = useMemo(() => {
-    if (!editingMessage || !activeConversation) return null;
-    return activeConversation.messages.find(m => m.id === editingMessage.id) || null;
-  }, [editingMessage, activeConversation]);
-
   const displaySampleQueries = !activeConversation || (activeConversation.messages && activeConversation.messages.length === 0);
 
   return (
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" className="border-r">
         <SidebarHeader className="p-0 border-b border-sidebar-border">
-          <div className="flex h-12 items-center px-3">
+          <div className="flex h-12 items-center justify-between px-3"> {/* Ensure padding and height for proper alignment */}
             <SidebarTrigger asChild>
-              <Button variant="ghost" className="h-9 w-auto px-2 group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:px-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                <PanelLeft className="h-[1.2rem] w-[1.2rem]" />
-                <span className="ml-2 text-sm font-medium group-data-[collapsible=icon]:hidden text-muted-foreground">
-                  DeepReact Chat
-                </span>
-                <span className="sr-only group-data-[collapsible=expanded]:hidden">Toggle Sidebar</span>
+              <Button
+                variant="ghost"
+                className="h-9 w-auto px-2 group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 text-sidebar-foreground hover:bg-sidebar-accent focus-visible:ring-sidebar-ring"
+              >
+                {/* Expanded: Text then Icon */}
+                <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
+                  <span className="text-sm font-medium text-muted-foreground whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:opacity-0">
+                    DeepReact Chat
+                  </span>
+                  <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
+                </div>
+                {/* Collapsed: Icon only */}
+                <div className="hidden items-center justify-center group-data-[collapsible=icon]:flex">
+                  <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
+                </div>
+                <span className="sr-only">Toggle Sidebar</span>
               </Button>
             </SidebarTrigger>
           </div>
@@ -439,7 +436,9 @@ export default function ChatPage() {
               title="New Chat"
             >
               <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
-              <span className="ml-2 group-data-[collapsible=icon]:hidden">New Chat</span>
+              <span className="ml-2 whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:ml-0">
+                New Chat
+              </span>
               <span className="sr-only group-data-[collapsible=expanded]:hidden">New Chat</span>
             </Button>
           </div>
@@ -522,7 +521,6 @@ export default function ChatPage() {
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
             <div className="flex items-center">
-              {/* SidebarTrigger removed from here as it's now in SidebarHeader */}
               <ChatLogo className="h-8 w-8 text-primary mr-3" />
               <h1 className="text-xl font-semibold text-foreground">DeepReact Chat</h1>
             </div>
