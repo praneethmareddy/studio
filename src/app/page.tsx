@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X } from 'lucide-react';
+import { Plus, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,7 +43,8 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarRail, // Added SidebarRail
+  SidebarRail, 
+  SidebarTrigger, // Added SidebarTrigger
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
@@ -282,8 +283,6 @@ export default function ChatPage() {
   const handleStartEditConversationTitle = (conversation: Conversation) => {
     setEditingConversation(conversation);
     setEditingConversationTitleText(conversation.title);
-    // Ensure the sidebar item stays visible/editable if it's the active one.
-    // If it is not active, switch to it to make editing UI clear.
     if (activeConversationId !== conversation.id) {
        setActiveConversationId(conversation.id);
     }
@@ -293,7 +292,7 @@ export default function ChatPage() {
     if (!editingConversation) return;
     setConversations(prev => prev.map(conv => 
       conv.id === editingConversation.id 
-        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } // Update timestamp to sort to top
+        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } 
         : conv
     ).sort((a, b) => b.timestamp - a.timestamp));
     setEditingConversation(null);
@@ -404,10 +403,11 @@ export default function ChatPage() {
           </ScrollArea>
         </SidebarContent>
       </Sidebar>
-      <SidebarRail /> {/* Added SidebarRail for desktop toggle */}
+      <SidebarRail /> 
       <SidebarInset className="flex flex-col !p-0">
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center p-4 shadow-md">
+            <SidebarTrigger className="mr-2" /> {/* Added SidebarTrigger here */}
             <ChatLogo className="h-8 w-8 text-primary mr-3" />
             <h1 className="text-xl font-semibold">DeepReact Chat</h1>
           </header>
