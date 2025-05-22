@@ -24,8 +24,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark"> {/* Ensure dark theme is applied if CSS relies on .dark */}
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
+    <html lang="en" className="dark h-full"> {/* Ensure dark theme and full height */}
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground h-full flex flex-col`}>
         {children}
         <Toaster />
       </body>
