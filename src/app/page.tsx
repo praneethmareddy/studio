@@ -1,6 +1,8 @@
+
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback }
+from 'react';
 import type { Message, Conversation } from '@/lib/types';
 import { ChatHistory } from '@/components/chat/ChatHistory';
 import { ChatInput } from '@/components/chat/ChatInput';
@@ -10,8 +12,27 @@ import { generateResponse } from '@/ai/flows/generate-response';
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, MessageSquare } from 'lucide-react';
+import { Plus, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarProvider,
   Sidebar,
@@ -23,14 +44,37 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
+import { cn } from '@/lib/utils';
 
 const CONVERSATIONS_STORAGE_KEY = 'deepReactConversations';
+
+type AlertDialogState = {
+  isOpen: boolean;
+  title: string;
+  description: string;
+  onConfirm: () => void;
+  confirmText?: string;
+  cancelText?: string;
+};
 
 export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [editingMessageText, setEditingMessageText] = useState<string>('');
+
+  const [editingConversation, setEditingConversation] = useState<Conversation | null>(null);
+  const [editingConversationTitleText, setEditingConversationTitleText] = useState<string>('');
+  
+  const [alertDialogState, setAlertDialogState] = useState<AlertDialogState>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: () => {},
+  });
 
   // Load conversations from localStorage on initial render
   useEffect(() => {
@@ -39,10 +83,11 @@ export default function ChatPage() {
       if (storedConversations) {
         const loadedConversations: Conversation[] = JSON.parse(storedConversations);
         if (loadedConversations.length > 0) {
-          // Sort by timestamp to ensure the first one is the most recent for default selection
           const sorted = [...loadedConversations].sort((a, b) => b.timestamp - a.timestamp);
           setConversations(sorted);
-          setActiveConversationId(sorted[0].id); // Default to most recent
+          if (sorted.length > 0 && !activeConversationId) {
+            setActiveConversationId(sorted[0].id);
+          }
         }
       }
     } catch (error) {
@@ -53,11 +98,10 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [toast]);
+  }, [toast]); // Removed activeConversationId from deps to avoid re-triggering
 
   // Save conversations to localStorage whenever they change
   useEffect(() => {
-    // Avoid writing empty array if nothing was there, but allow clearing if it was set.
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
       try {
         localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations));
@@ -81,10 +125,12 @@ export default function ChatPage() {
   }, [conversations]);
 
   const handleNewChat = () => {
-    setActiveConversationId(null); // Next message will create a new conversation
+    setEditingConversation(null); // Cancel any title edit
+    setActiveConversationId(null); 
   };
 
   const handleSelectConversation = (conversationId: string) => {
+    setEditingConversation(null); // Cancel any title edit
     setActiveConversationId(conversationId);
   };
 
@@ -101,10 +147,9 @@ export default function ChatPage() {
     let updatedConversations = [...conversations];
 
     if (!currentConversationId) {
-      // Create new conversation
       const newConversation: Conversation = {
         id: Date.now().toString(),
-        title: text.substring(0, 40) + (text.length > 40 ? '...' : ''),
+        title: text.substring(0, 30) + (text.length > 30 ? '...' : ''),
         timestamp: Date.now(),
         messages: [newUserMessage],
       };
@@ -112,7 +157,6 @@ export default function ChatPage() {
       currentConversationId = newConversation.id;
       setActiveConversationId(newConversation.id);
     } else {
-      // Add to existing conversation
       updatedConversations = updatedConversations.map(conv =>
         conv.id === currentConversationId
           ? { ...conv, messages: [...conv.messages, newUserMessage], timestamp: Date.now() }
@@ -126,7 +170,6 @@ export default function ChatPage() {
       if (!conversationForAI) throw new Error("Active conversation not found");
 
       let contextSummary = "No previous conversation.";
-      // Use messages *before* the current user prompt for summary
       const messagesForSummary = conversationForAI.messages.slice(0, -1); 
       if (messagesForSummary.length > 0) {
         const historyToSummarize = messagesForSummary
@@ -144,7 +187,7 @@ export default function ChatPage() {
       });
 
       const newAiMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: (Date.now() + 1).toString(), // Ensure unique ID
         text: aiResponseResult.response,
         sender: 'ai',
         timestamp: Date.now(),
@@ -183,6 +226,108 @@ export default function ChatPage() {
     }
   };
 
+  // --- Message CRUD ---
+  const handleStartEditMessage = (message: Message) => {
+    setEditingMessage(message);
+    setEditingMessageText(message.text);
+  };
+
+  const handleSaveEditedMessage = () => {
+    if (!editingMessage || !activeConversationId) return;
+    setConversations(prev => prev.map(conv => 
+      conv.id === activeConversationId 
+        ? {
+            ...conv,
+            messages: conv.messages.map(msg => 
+              msg.id === editingMessage.id 
+                ? { ...msg, text: editingMessageText, timestamp: Date.now() } // Optionally update timestamp
+                : msg
+            ),
+          }
+        : conv
+    ));
+    setEditingMessage(null);
+    setEditingMessageText('');
+    toast({ title: "Message updated" });
+  };
+
+  const handleCancelEditMessage = () => {
+    setEditingMessage(null);
+    setEditingMessageText('');
+  };
+
+  const handleDeleteMessage = (messageId: string) => {
+    if (!activeConversationId) return;
+    setAlertDialogState({
+      isOpen: true,
+      title: "Delete Message?",
+      description: "Are you sure you want to delete this message? This action cannot be undone.",
+      onConfirm: () => {
+        setConversations(prev => prev.map(conv => 
+          conv.id === activeConversationId
+            ? {
+                ...conv,
+                messages: conv.messages.filter(msg => msg.id !== messageId),
+              }
+            : conv
+        ));
+        toast({ title: "Message deleted" });
+        setAlertDialogState(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  // --- Conversation CRUD ---
+  const handleStartEditConversationTitle = (conversation: Conversation) => {
+    setEditingConversation(conversation);
+    setEditingConversationTitleText(conversation.title);
+    // Ensure the sidebar item stays visible/editable if it's the active one.
+    // If it is not active, switch to it to make editing UI clear.
+    if (activeConversationId !== conversation.id) {
+       setActiveConversationId(conversation.id);
+    }
+  };
+  
+  const handleSaveEditedConversationTitle = () => {
+    if (!editingConversation) return;
+    setConversations(prev => prev.map(conv => 
+      conv.id === editingConversation.id 
+        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } // Update timestamp to sort to top
+        : conv
+    ).sort((a, b) => b.timestamp - a.timestamp));
+    setEditingConversation(null);
+    setEditingConversationTitleText('');
+    toast({ title: "Conversation title updated" });
+  };
+
+  const handleCancelEditConversationTitle = () => {
+    setEditingConversation(null);
+    setEditingConversationTitleText('');
+  };
+
+  const handleDeleteConversation = (conversationId: string) => {
+     setAlertDialogState({
+      isOpen: true,
+      title: "Delete Conversation?",
+      description: "Are you sure you want to delete this entire conversation? This action cannot be undone.",
+      onConfirm: () => {
+        setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+        if (activeConversationId === conversationId) {
+          const remainingConversations = conversations.filter(c => c.id !== conversationId).sort((a,b) => b.timestamp - a.timestamp);
+          setActiveConversationId(remainingConversations.length > 0 ? remainingConversations[0].id : null);
+        }
+        toast({ title: "Conversation deleted" });
+        setAlertDialogState(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const currentEditingMessage = useMemo(() => {
+    if (!editingMessage || !activeConversation) return null;
+    return activeConversation.messages.find(m => m.id === editingMessage.id) || null;
+  }, [editingMessage, activeConversation]);
+
+
   return (
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" className="border-r">
@@ -207,26 +352,58 @@ export default function ChatPage() {
             )}
             <SidebarMenu className="p-2">
               {sortedConversations.map(conv => (
-                <SidebarMenuItem key={conv.id}>
-                  <SidebarMenuButton
-                    isActive={conv.id === activeConversationId}
-                    onClick={() => handleSelectConversation(conv.id)}
-                    tooltip={{ children: conv.title, side: 'right', align: 'center' }}
-                    className="justify-start w-full"
-                  >
-                    <MessageSquare size={18} className="text-muted-foreground group-data-[collapsible=icon]:text-foreground" />
-                    <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
-                  </SidebarMenuButton>
+                <SidebarMenuItem key={conv.id} className="group/conv-item">
+                  {editingConversation?.id === conv.id ? (
+                    <div className="flex items-center gap-2 p-1 w-full">
+                      <Input 
+                        type="text" 
+                        value={editingConversationTitleText}
+                        onChange={(e) => setEditingConversationTitleText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEditedConversationTitle();
+                          if (e.key === 'Escape') handleCancelEditConversationTitle();
+                        }}
+                        className="h-8 flex-grow"
+                        autoFocus
+                      />
+                      <Button variant="ghost" size="icon" onClick={handleSaveEditedConversationTitle} className="h-8 w-8 text-green-500 hover:text-green-400"><Save size={16}/></Button>
+                      <Button variant="ghost" size="icon" onClick={handleCancelEditConversationTitle} className="h-8 w-8 text-red-500 hover:text-red-400"><X size={16}/></Button>
+                    </div>
+                  ) : (
+                    <SidebarMenuButton
+                      isActive={conv.id === activeConversationId}
+                      onClick={() => handleSelectConversation(conv.id)}
+                      tooltip={{ children: conv.title, side: 'right', align: 'center' }}
+                      className="justify-between w-full group-data-[collapsible=icon]:justify-center"
+                    >
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <MessageSquare size={18} className="text-muted-foreground group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
+                        <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 group-data-[collapsible=icon]:hidden focus:opacity-100" onClick={(e) => e.stopPropagation()}>
+                            <MoreHorizontal size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start">
+                          <DropdownMenuItem onClick={() => handleStartEditConversationTitle(conv)}>
+                            <Pencil size={14} className="mr-2" /> Edit Title
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)} className="text-red-500 hover:!text-red-500 focus:!text-red-500">
+                            <Trash2 size={14} className="mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </SidebarMenuButton>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
           </ScrollArea>
         </SidebarContent>
-        {/* <SidebarFooter>
-          Footer content if needed
-        </SidebarFooter> */}
       </Sidebar>
-      <SidebarInset className="flex flex-col !p-0"> {/* Override default padding of SidebarInset */}
+      <SidebarInset className="flex flex-col !p-0">
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center p-4 shadow-md">
             <ChatLogo className="h-8 w-8 text-primary mr-3" />
@@ -234,11 +411,53 @@ export default function ChatPage() {
           </header>
           <Separator />
           <main className="flex-1 overflow-hidden">
-            <ChatHistory messages={activeConversation?.messages || []} />
+             {currentEditingMessage && activeConversationId ? (
+                <div className="p-4 border-t border-border bg-card">
+                  <h3 className="text-sm font-semibold mb-2">Editing message:</h3>
+                  <Textarea
+                    value={editingMessageText}
+                    onChange={(e) => setEditingMessageText(e.target.value)}
+                    className="mb-2"
+                    rows={3}
+                    autoFocus
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={handleCancelEditMessage} size="sm">Cancel</Button>
+                    <Button onClick={handleSaveEditedMessage} size="sm">Save Changes</Button>
+                  </div>
+                </div>
+              ) : (
+                 <ChatHistory
+                    messages={activeConversation?.messages || []}
+                    onEditMessage={handleStartEditMessage}
+                    onDeleteMessage={handleDeleteMessage}
+                    activeConversationId={activeConversationId}
+                 />
+              )}
           </main>
-          <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+          {!editingMessage && <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />}
         </div>
       </SidebarInset>
+
+      {/* Alert Dialog for confirmations */}
+      <AlertDialog open={alertDialogState.isOpen} onOpenChange={(isOpen) => setAlertDialogState(prev => ({...prev, isOpen}))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{alertDialogState.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {alertDialogState.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAlertDialogState(prev => ({...prev, isOpen: false}))}>
+              {alertDialogState.cancelText || "Cancel"}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={alertDialogState.onConfirm}>
+              {alertDialogState.confirmText || "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarProvider>
   );
 }
