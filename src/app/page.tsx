@@ -11,13 +11,12 @@ import { ChatLogo } from '@/components/icons/ChatLogo';
 // import { generateResponse } from '@/ai/flows/generate-response'; // Commented out for echo response
 import { SampleQueries } from '@/components/sample-queries/SampleQueries';
 import { useToast } from "@/hooks/use-toast";
-import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft } from 'lucide-react'; // Changed Plus to SquarePen
-import { ThemeToggleButton } from '@/components/theme-toggle-button'; // Import ThemeToggleButton
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X } from 'lucide-react';
+import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,7 +38,6 @@ import {
   Sidebar,
   SidebarHeader,
   SidebarContent,
-  // SidebarFooter, // Not used for now
   SidebarInset,
   SidebarMenu,
   SidebarMenuItem,
@@ -109,7 +107,7 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [toast]);
+  }, [toast]); // Removed activeConversationId from deps as it's set inside
 
   useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
@@ -148,6 +146,8 @@ export default function ChatPage() {
 
   const handleSampleQueryClick = (query: string) => {
     setChatInputValue(query);
+    // Optionally, focus the input after setting the value
+    // chatInputRef.current?.focus(); 
   };
 
   const handleSendMessage = async (text: string) => {
@@ -185,9 +185,11 @@ export default function ChatPage() {
     setChatInputValue('');
 
     try {
+      // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 500));
+      // Echo response logic (replace with actual AI call later)
       const newAiMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: (Date.now() + 1).toString(), // Ensure unique ID
         text: `Echo: ${text}`,
         sender: 'ai',
         timestamp: Date.now(),
@@ -275,7 +277,7 @@ export default function ChatPage() {
       conv.id === editingConversation.id 
         ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } 
         : conv
-    ).sort((a, b) => b.timestamp - a.timestamp));
+    ).sort((a, b) => b.timestamp - a.timestamp)); // Re-sort after title update potentially affecting order
     setEditingConversation(null);
     setEditingConversationTitleText('');
     toast({ title: "Conversation title updated" });
@@ -308,22 +310,25 @@ export default function ChatPage() {
     return activeConversation.messages.find(m => m.id === editingMessage.id) || null;
   }, [editingMessage, activeConversation]);
 
+  // Show sample queries if no conversation is active OR if the active one has no messages
   const displaySampleQueries = !activeConversation || (activeConversation.messages && activeConversation.messages.length === 0);
 
   return (
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" className="border-r">
-        <SidebarHeader className="p-2 border-b">
-          <Button
-            variant="outline" // Using outline for better contrast with sidebar bg
-            onClick={handleNewChat}
-            className="w-full flex items-center justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground px-3 py-2 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center"
-            title="New Chat"
-          >
-            <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
-            <span className="ml-2 group-data-[collapsible=icon]:hidden">New Chat</span>
-            <span className="sr-only group-data-[collapsible=expanded]:hidden">New Chat</span>
-          </Button>
+        <SidebarHeader className="border-b">
+           <div className="p-2">
+            <Button
+              variant="default" // Changed to default for primary color (blue)
+              onClick={handleNewChat}
+              className="w-full flex items-center justify-start text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-start"
+              title="New Chat"
+            >
+              <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" /> {/* Reverted to mx-auto for centering icon in small button, can be adjusted */}
+              <span className="ml-2 group-data-[collapsible=icon]:hidden">New Chat</span>
+              <span className="sr-only group-data-[collapsible=expanded]:hidden">New Chat</span>
+            </Button>
+          </div>
         </SidebarHeader>
         <SidebarContent className="p-0">
           <ScrollArea className="h-full">
@@ -334,7 +339,11 @@ export default function ChatPage() {
             )}
             <SidebarMenu className="p-2">
               {sortedConversations.map(conv => (
-                <SidebarMenuItem key={conv.id} className="group/conv-item flex items-center justify-between">
+                <SidebarMenuItem 
+                  key={conv.id} 
+                  className="group/conv-item flex items-center justify-between"
+                  isActive={conv.id === activeConversationId} // Pass isActive to SidebarMenuItem
+                >
                   {editingConversation?.id === conv.id ? (
                     <div className="flex items-center gap-2 p-1 w-full">
                       <Input 
@@ -354,13 +363,14 @@ export default function ChatPage() {
                   ) : (
                     <>
                       <SidebarMenuButton
-                        isActive={conv.id === activeConversationId}
+                        // isActive prop removed, parent SidebarMenuItem handles active state styling
                         onClick={() => handleSelectConversation(conv.id)}
                         tooltip={{ children: conv.title, side: 'right', align: 'center' }}
                         className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center"
                       >
                         <div className="flex items-center gap-2 overflow-hidden">
-                          <MessageSquare size={18} className="text-muted-foreground group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
+                           {/* Ensure text color contrasts with active background if needed */}
+                          <MessageSquare size={18} className="text-muted-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
                           <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
                         </div>
                       </SidebarMenuButton>
@@ -371,8 +381,8 @@ export default function ChatPage() {
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground" 
-                              onClick={(e) => e.stopPropagation()}
+                              className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[[data-active=true]]/conv-item:hover:text-inherit/80"
+                              onClick={(e) => e.stopPropagation()} // Prevent conversation selection
                             >
                               <MoreHorizontal size={16} />
                             </Button>
@@ -381,7 +391,7 @@ export default function ChatPage() {
                             <DropdownMenuItem onClick={() => handleStartEditConversationTitle(conv)}>
                               <Pencil size={14} className="mr-2" /> Edit Title
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)} className="text-destructive hover:!text-destructive focus:!text-destructive">
+                            <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)} className="text-destructive hover:!text-destructive focus:!text-destructive focus-visible:!text-destructive">
                               <Trash2 size={14} className="mr-2" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -406,7 +416,6 @@ export default function ChatPage() {
             </div>
             <ThemeToggleButton />
           </header>
-          {/* Separator removed as header now has border-b */}
           <main className="flex-1 overflow-hidden">
              {currentEditingMessage && activeConversationId ? (
                 <div className="p-4 border-t border-border bg-card">

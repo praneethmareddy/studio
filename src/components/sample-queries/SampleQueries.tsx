@@ -2,7 +2,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Lightbulb } from 'lucide-react';
+import { ChatLogo } from '@/components/icons/ChatLogo'; // Changed from Lightbulb
 
 interface SampleQueriesProps {
   queries: string[];
@@ -12,7 +12,7 @@ interface SampleQueriesProps {
 export function SampleQueries({ queries, onQueryClick }: SampleQueriesProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-      <Lightbulb className="w-16 h-16 text-primary mb-6" />
+      <ChatLogo className="w-16 h-16 text-primary mb-6 animate-pulse" /> {/* Replaced Lightbulb, added animate-pulse */}
       <h2 className="text-2xl font-semibold mb-4 text-foreground">Start a conversation</h2>
       <p className="text-muted-foreground mb-8">
         You can ask me anything! Here are a few examples to get you started:
@@ -35,5 +35,3 @@ export function SampleQueries({ queries, onQueryClick }: SampleQueriesProps) {
     </div>
   );
 }
-
-    
