@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Menu } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Menu, Download, RefreshCw, ThumbsUp, ThumbsDown, Copy } from 'lucide-react';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   AlertDialog,
@@ -148,7 +148,7 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [activeConversationId, toast]); // Added activeConversationId to ensure it tries to set one if available on load
+  }, [activeConversationId, toast]); 
 
   useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
@@ -297,17 +297,19 @@ export default function ChatPage() {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
           if (messageIndex === -1) return conv;
   
+          // Remove the original message and all subsequent messages
           const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
             messages: messagesUpToEdit,
-            timestamp: Date.now(),
+            timestamp: Date.now(), // Update conversation timestamp
           };
         }
         return conv;
       });
     });
   
+    // Ensure state update completes before sending new message
     await new Promise(resolve => setTimeout(resolve, 0)); 
     await handleSendMessage(editingMessageText.trim()); 
   
@@ -326,18 +328,22 @@ export default function ChatPage() {
     setAlertDialogState({
       isOpen: true,
       title: "Delete Message?",
-      description: "Are you sure you want to delete this message? This action cannot be undone.",
+      description: "Are you sure you want to delete this message and all subsequent messages in this chat? This action cannot be undone.",
       onConfirm: () => {
-        setConversations(prev => prev.map(conv => 
-          conv.id === activeConversationId
-            ? {
+        setConversations(prev => prev.map(conv => {
+          if (conv.id === activeConversationId) {
+            const messageIndex = conv.messages.findIndex(msg => msg.id === messageId);
+            if (messageIndex !== -1) {
+              return {
                 ...conv,
-                messages: conv.messages.filter(msg => msg.id !== messageId),
-                 timestamp: Date.now()
-              }
-            : conv
-        ));
-        toast({ title: "Message deleted" });
+                messages: conv.messages.slice(0, messageIndex),
+                timestamp: Date.now()
+              };
+            }
+          }
+          return conv;
+        }));
+        toast({ title: "Message and subsequent messages deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
       }
     });
@@ -404,6 +410,7 @@ export default function ChatPage() {
           const aiMessageIndex = conv.messages.findIndex(msg => msg.id === messageId && msg.sender === 'ai');
           if (aiMessageIndex > 0 && conv.messages[aiMessageIndex - 1].sender === 'user') { 
             userPromptForAIMessage = conv.messages[aiMessageIndex - 1].text;
+            // Remove AI message and subsequent messages to allow regeneration
             const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex); 
             return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
           }
@@ -413,6 +420,7 @@ export default function ChatPage() {
     });
   
     if (userPromptForAIMessage) {
+      // Use timeout to ensure state update is processed before sending new message
       setTimeout(() => {
         handleSendMessage(userPromptForAIMessage);
         toast({ title: "Regenerating response..." });
@@ -470,7 +478,24 @@ export default function ChatPage() {
         }
         toast({ title: "Conversation deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
-      }
+      },
+      confirmText: "Delete"
+    });
+  };
+
+  const handleDeleteAllConversations = () => {
+    setAlertDialogState({
+      isOpen: true,
+      title: "Delete All Chats?",
+      description: "Are you sure you want to delete all your conversations? This action cannot be undone and will clear all chat history.",
+      onConfirm: () => {
+        setConversations([]);
+        setActiveConversationId(null);
+        toast({ title: "All conversations deleted" });
+        setAlertDialogState(prev => ({ ...prev, isOpen: false }));
+      },
+      confirmText: "Delete All",
+      cancelText: "Cancel"
     });
   };
 
@@ -597,6 +622,16 @@ export default function ChatPage() {
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-2">
           <SidebarMenuButton
+            onClick={handleDeleteAllConversations}
+            tooltip={{ children: "Delete All Chats", side: 'right', align: 'center' }}
+            className="w-full group-data-[collapsible=icon]:justify-center text-destructive hover:!bg-destructive/10 hover:!text-destructive focus:!text-destructive focus-visible:!text-destructive"
+          >
+            <Trash2 size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
+            <span className="truncate group-data-[collapsible=icon]:hidden">
+              Delete All Chats
+            </span>
+          </SidebarMenuButton>
+          <SidebarMenuButton
             tooltip={{ children: "User Profile", side: 'right', align: 'center' }}
             className="w-full group-data-[collapsible=icon]:justify-center"
           >
@@ -616,7 +651,7 @@ export default function ChatPage() {
               <div className="md:hidden mr-2">
                 <SidebarTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Open sidebar">
-                    <Menu className="h-5 w-5" />
+                    <PanelLeft className="h-5 w-5" />
                   </Button>
                 </SidebarTrigger>
               </div>
@@ -694,3 +729,4 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
+
