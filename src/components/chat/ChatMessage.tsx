@@ -24,10 +24,10 @@ interface ChatMessageProps {
 }
 
 const markdownComponents = {
-  pre: ({node, ...props}) => <pre className="bg-black/20 dark:bg-white/10 p-3 my-2 rounded-md overflow-x-auto text-sm leading-relaxed" {...props} />,
-  code({node, inline, className, children, ...props}) {
+  pre: ({node, ...props}: any) => <pre className="bg-black/20 dark:bg-white/10 p-3 my-2 rounded-md overflow-x-auto text-sm leading-relaxed" {...props} />,
+  code({node, inline, className, children, ...props}: any) {
     const match = /language-(\w+)/.exec(className || '');
-    const codeString = Array.isArray(children) ? children.join('') : children;
+    const codeString = Array.isArray(children) ? children.join('') : String(children);
     return !inline ? ( 
       <code className={cn(className, "font-mono")} {...props}>
         {codeString}
@@ -38,16 +38,20 @@ const markdownComponents = {
       </code>
     );
   },
-  p: ({node, ...props}) => <p className="text-inherit mb-2 last:mb-0" {...props} />,
-  ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2 text-inherit" {...props} />,
-  ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-2 text-inherit" {...props} />,
-  li: ({node, ...props}) => <li className="mb-1 text-inherit" {...props} />,
-  a: ({node, ...props}) => <a className="text-primary underline hover:text-primary/80" {...props} />,
-  h1: ({node, ...props}) => <h1 className="text-2xl font-bold my-2 text-inherit" {...props} />,
-  h2: ({node, ...props}) => <h2 className="text-xl font-semibold my-2 text-inherit" {...props} />,
-  h3: ({node, ...props}) => <h3 className="text-lg font-semibold my-1.5 text-inherit" {...props} />,
+  p: ({node, ...props}: any) => <p className="text-inherit mb-2 last:mb-0" {...props} />,
+  ul: ({node, ...props}: any) => <ul className="list-disc pl-5 mb-2 text-inherit" {...props} />,
+  ol: ({node, ...props}: any) => <ol className="list-decimal pl-5 mb-2 text-inherit" {...props} />,
+  li: ({node, ...props}: any) => <li className="mb-1 text-inherit" {...props} />,
+  a: ({node, ...props}: any) => <a className="text-primary underline hover:text-primary/80" {...props} />,
+  h1: ({node, ...props}: any) => <h1 className="text-2xl font-bold my-2 text-inherit" {...props} />,
+  h2: ({node, ...props}: any) => <h2 className="text-xl font-semibold my-2 text-inherit" {...props} />,
+  h3: ({node, ...props}: any) => <h3 className="text-lg font-semibold my-1.5 text-inherit" {...props} />,
 };
 
+const modelDisplayNames: { [key: string]: string } = {
+  'llama3': 'Llama 3',
+  'deepseek-r1': 'Deepseek-R1',
+};
 
 export function ChatMessage({
   message,
@@ -61,6 +65,7 @@ export function ChatMessage({
   onDislikeAIMessage,
 }: ChatMessageProps) {
   const isUser = message.sender === 'user';
+  const modelUsedLabel = !isUser && message.modelUsed ? modelDisplayNames[message.modelUsed] || message.modelUsed : '';
 
   const ActionButton = ({
     onClick,
@@ -95,19 +100,18 @@ export function ChatMessage({
   return (
     <div
       className={cn(
-        'group/message flex items-end gap-2 my-1 py-1', // items-end to align actions with bottom of multi-line bubbles
+        'group/message flex items-end gap-2 my-1 py-1', 
         isUser ? 'justify-end' : 'justify-start'
       )}
     >
       {!isUser && (
-        <Avatar className="h-8 w-8 flex-shrink-0 self-start mt-1"> {/* self-start for AI avatar */}
+        <Avatar className="h-8 w-8 flex-shrink-0 self-start mt-1">
           <AvatarFallback className="bg-primary text-primary-foreground">
             <Bot size={20} />
           </AvatarFallback>
         </Avatar>
       )}
       
-      {/* Group bubble and actions for correct ordering */}
       <div className={cn("flex items-end gap-1.5", isUser ? "flex-row-reverse" : "flex-row")}>
         <div
           className={cn(
@@ -117,7 +121,7 @@ export function ChatMessage({
                : 'bg-card text-card-foreground rounded-xl rounded-bl-sm'
           )}
         >
-          <div className={cn("p-3 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
+          <div className={cn("p-3 text-sm", isUser ? "text-primary-foreground whitespace-pre-wrap" : "text-card-foreground" )}>
             {isUser ? (
               message.text
             ) : (
@@ -126,17 +130,20 @@ export function ChatMessage({
               </ReactMarkdown>
             )}
           </div>
-          <span
-            className={cn(
-              'text-xs self-end px-3 pb-1.5 pt-0',
-              isUser ? 'text-primary-foreground/70' : 'text-muted-foreground/90'
+          <div className="flex items-center self-end px-3 pb-1.5 pt-0 text-xs">
+            {!isUser && modelUsedLabel && (
+              <span className="mr-2 opacity-75 text-muted-foreground/80">via {modelUsedLabel}</span>
             )}
-          >
-            {format(new Date(message.timestamp), 'p')}
-          </span>
+            <span
+              className={cn(
+                isUser ? 'text-primary-foreground/70' : 'text-muted-foreground/90'
+              )}
+            >
+              {format(new Date(message.timestamp), 'p')}
+            </span>
+          </div>
         </div>
 
-        {/* Direct Action Icons */}
         <div className="flex flex-col sm:flex-row items-center gap-0.5 opacity-0 group-hover/message:opacity-100 focus-within:opacity-100 transition-opacity duration-200 mb-1">
           {isUser && (
             <>
@@ -158,7 +165,7 @@ export function ChatMessage({
       </div>
 
       {isUser && (
-         <Avatar className="h-8 w-8 flex-shrink-0 self-start mt-1"> {/* self-start for User avatar */}
+         <Avatar className="h-8 w-8 flex-shrink-0 self-start mt-1">
           <AvatarFallback className="bg-accent text-accent-foreground">
             <User size={20} />
           </AvatarFallback>
