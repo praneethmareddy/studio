@@ -4,12 +4,16 @@ import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { User, Bot, Pencil, Trash2, Download, Copy, RefreshCw, ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react';
+import {
+  User, Bot, Pencil, Trash2, Download, Copy, RefreshCw, ThumbsUp, ThumbsDown,
+} from 'lucide-react';
 import { format } from 'date-fns';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import React from 'react';
+import { useState } from 'react';
 
 interface ChatMessageProps {
   message: Message;
@@ -25,7 +29,7 @@ interface ChatMessageProps {
 
 const markdownComponents = {
   pre: ({ node, ...props }: any) => (
-    <pre className="bg-black/20 dark:bg-white/10 p-3 my-2 rounded-md overflow-auto max-w-full text-sm leading-relaxed" {...props} />
+    <pre className="bg-black/20 dark:bg-white/10 p-3 my-2 rounded-md overflow-x-auto max-w-full text-sm leading-relaxed" {...props} />
   ),
   code({ node, inline, className, children, ...props }: any) {
     const match = /language-(\w+)/.exec(className || '');
@@ -68,8 +72,20 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const isUser = message.sender === 'user';
   const modelUsedLabel = !isUser && message.modelUsed ? modelDisplayNames[message.modelUsed] || message.modelUsed : '';
-  const isDeepseek = message.modelUsed === 'deepseek-r1';
-  const [showMeta, setShowMeta] = React.useState(false);
+  const [showThink, setShowThink] = useState(false);
+
+  // Deepseek-style <think> parsing
+  const hasThink = message.modelUsed?.includes("deepseek") && message.text.includes("<think>");
+  let mainText = message.text;
+  let thinkText = "";
+
+  if (hasThink) {
+    const match = /<think>([\s\S]*?)<\/think>/i.exec(message.text);
+    if (match) {
+      thinkText = match[1].trim();
+      mainText = message.text.replace(match[0], "").trim();
+    }
+  }
 
   const ActionButton = ({
     onClick,
@@ -119,7 +135,7 @@ export function ChatMessage({
       <div className={cn("flex items-end gap-1.5", isUser ? "flex-row-reverse" : "flex-row")}>
         <div
           className={cn(
-            'max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl shadow-md flex flex-col',
+            'max-w-[75%] shadow-md flex flex-col overflow-hidden break-words',
             isUser
               ? 'bg-primary text-primary-foreground rounded-xl rounded-br-sm'
               : 'bg-card text-card-foreground rounded-xl rounded-bl-sm'
@@ -129,41 +145,54 @@ export function ChatMessage({
             {isUser ? (
               message.text
             ) : (
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {message.text}
-              </ReactMarkdown>
+              <>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {mainText}
+                </ReactMarkdown>
+
+                {hasThink && (
+                  <>
+                    <div
+                      className="cursor-pointer text-xs opacity-70 mt-2"
+                      onClick={() => setShowThink(prev => !prev)}
+                    >
+                      <span className="hover:underline px-1">
+                        {showThink ? "Hide thoughts" : "Show thoughts"}
+                      </span>
+                    </div>
+
+                    {showThink && (
+                      <div className="mt-1 text-xs text-muted-foreground px-1">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                          {thinkText}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
-          <div className="flex items-center justify-between px-3 pb-1.5 pt-0 text-xs">
+
+          <div className="flex items-center self-end px-3 pb-1.5 pt-0 text-xs">
             {!isUser && modelUsedLabel && (
-              isDeepseek ? (
-                <button
-                  onClick={() => setShowMeta(!showMeta)}
-                  className="flex items-center gap-1 text-muted-foreground/80 hover:underline"
-                >
-                  <ChevronDown size={14} />
-                  Show Info
-                </button>
-              ) : (
-                <span className="opacity-75 text-muted-foreground/80">via {modelUsedLabel}</span>
-              )
+              <span className="mr-2 opacity-75 text-muted-foreground/80">via {modelUsedLabel}</span>
             )}
-            {(!isDeepseek || showMeta) && (
-              <span className={cn(isUser ? 'text-primary-foreground/70' : 'text-muted-foreground/90')}>
-                {format(new Date(message.timestamp), 'p')}
-              </span>
-            )}
+            <span className={cn(isUser ? 'text-primary-foreground/70' : 'text-muted-foreground/90')}>
+              {format(new Date(message.timestamp), 'p')}
+            </span>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-0.5 opacity-0 group-hover/message:opacity-100 focus-within:opacity-100 transition-opacity duration-200 mb-1">
-          {isUser ? (
+          {isUser && (
             <>
               <ActionButton onClick={onEdit} icon={Pencil} tooltipText="Edit & Resend" />
               <ActionButton onClick={() => onCopyUserMessage(message.text)} icon={Copy} tooltipText="Copy" />
               <ActionButton onClick={onDelete} icon={Trash2} tooltipText="Delete" className="hover:text-destructive text-destructive/80" />
             </>
-          ) : (
+          )}
+          {!isUser && (
             <>
               <ActionButton onClick={() => onCopyAIMessage(message.text)} icon={Copy} tooltipText="Copy" />
               <ActionButton onClick={onDownloadAIMessage} icon={Download} tooltipText="Download" />
