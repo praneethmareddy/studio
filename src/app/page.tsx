@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Menu } from 'lucide-react';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   AlertDialog,
@@ -148,7 +148,7 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [toast]); 
+  }, [activeConversationId, toast]); // Added activeConversationId to ensure it tries to set one if available on load
 
   useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
@@ -181,16 +181,12 @@ export default function ChatPage() {
       }
     });
 
-    // Get monthly group keys, filter out already processed ones, and sort them by date descending
     const monthlyGroupKeys = Object.keys(grouped)
       .filter(key => !groupOrder.includes(key))
       .sort((a, b) => {
-         // Heuristic: Try to parse "Month YYYY" format. More robust parsing might be needed if formats vary.
         const dateA = new Date(`01 ${a}`); 
         const dateB = new Date(`01 ${b}`);
-        // Check for invalid dates which might result from non-standard month names
         if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-            // Fallback for non-standard keys or simply keep original order if parsing fails
             return 0; 
         }
         return dateB.getTime() - dateA.getTime();
@@ -222,8 +218,6 @@ export default function ChatPage() {
 
   const handleSampleQueryClick = (query: string) => {
     setChatInputValue(query);
-    // Optionally, auto-focus the chat input after selecting a sample query
-    // document.querySelector('textarea[aria-label="Chat input"]')?.focus();
   };
 
   const handleSendMessage = useCallback(async (text: string) => {
@@ -258,16 +252,14 @@ export default function ChatPage() {
       );
     }
     setConversations(updatedConversations); 
-    setChatInputValue(''); // Clear the input after sending
+    setChatInputValue('');
 
     try {
-      // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 500)); 
       
-      // Echo response for testing
       const newAiMessage: Message = {
-        id: (Date.now() + 1).toString(), // Ensure unique ID
-        text: `Echo: ${text}\n\nThis is a **bold** and *italic* example.\n\`\`\`javascript\nconsole.log("Hello from AI!");\n\`\`\`\n- Item 1\n- Item 2\n\nHere's a table:\n\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |\n| Cell 3   | Cell 4   |`, // Example markdown
+        id: (Date.now() + 1).toString(),
+        text: `Echo: ${text}\n\nThis is a **bold** and *italic* example.\n\`\`\`javascript\nconsole.log("Hello from AI!");\n\`\`\`\n- Item 1\n- Item 2\n\nHere's a table:\n\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |\n| Cell 3   | Cell 4   |`,
         sender: 'ai',
         timestamp: Date.now(),
       };
@@ -299,31 +291,24 @@ export default function ChatPage() {
   const handleSaveEditedMessage = async () => {
     if (!editingMessage || !activeConversationId || !editingMessageText.trim()) return;
   
-    // Update conversations: find the active one, then find the message being edited.
-    // Remove all messages from the edited message onwards.
     setConversations(prev => {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
-          if (messageIndex === -1) return conv; // Should not happen
+          if (messageIndex === -1) return conv;
   
-          // Keep messages up to (but not including) the one being edited.
-          // Or, if the user message is the one being edited, keep up to before it.
           const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
-            messages: messagesUpToEdit, // Truncate messages here
-            timestamp: Date.now(), // Update conversation timestamp
+            messages: messagesUpToEdit,
+            timestamp: Date.now(),
           };
         }
         return conv;
       });
     });
   
-    // Use a microtask delay to ensure state update is processed before sending new message
     await new Promise(resolve => setTimeout(resolve, 0)); 
-  
-    // Send the edited text as a new message stream
     await handleSendMessage(editingMessageText.trim()); 
   
     setEditingMessage(null);
@@ -348,7 +333,7 @@ export default function ChatPage() {
             ? {
                 ...conv,
                 messages: conv.messages.filter(msg => msg.id !== messageId),
-                 timestamp: Date.now() // Update conversation timestamp
+                 timestamp: Date.now()
               }
             : conv
         ));
@@ -408,7 +393,6 @@ export default function ChatPage() {
     }
   };
 
-  // Regenerate AI message: find the AI message, get the user prompt before it, remove the AI message, and resend the user prompt.
   const handleRegenerateAIMessage = (messageId: string) => {
     if (!activeConversationId) return;
   
@@ -418,11 +402,8 @@ export default function ChatPage() {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const aiMessageIndex = conv.messages.findIndex(msg => msg.id === messageId && msg.sender === 'ai');
-          // Ensure there's a user message before this AI message
           if (aiMessageIndex > 0 && conv.messages[aiMessageIndex - 1].sender === 'user') { 
             userPromptForAIMessage = conv.messages[aiMessageIndex - 1].text;
-            // Remove the AI message and any subsequent AI messages (if any, though unlikely with current echo flow)
-            // For simplicity, we remove only the current AI message. If multiple AI responses were possible, logic would be more complex.
             const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex); 
             return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
           }
@@ -431,9 +412,7 @@ export default function ChatPage() {
       });
     });
   
-    // If a valid user prompt was found, send it again
     if (userPromptForAIMessage) {
-      // Use setTimeout to ensure state update is processed before calling handleSendMessage
       setTimeout(() => {
         handleSendMessage(userPromptForAIMessage);
         toast({ title: "Regenerating response..." });
@@ -444,12 +423,10 @@ export default function ChatPage() {
   };
   
   const handleLikeAIMessage = (messageId: string) => {
-    // Placeholder for actual like functionality
     toast({ title: "Message Liked!", description: `AI Message ID: ${messageId}` });
   };
   
   const handleDislikeAIMessage = (messageId: string) => {
-    // Placeholder for actual dislike functionality
     toast({ title: "Message Disliked.", description: `AI Message ID: ${messageId}` });
   };
 
@@ -457,7 +434,7 @@ export default function ChatPage() {
     setEditingConversation(conversation);
     setEditingConversationTitleText(conversation.title);
     if (activeConversationId !== conversation.id) {
-       setActiveConversationId(conversation.id); // Switch to the conversation being edited if not active
+       setActiveConversationId(conversation.id);
     }
   };
   
@@ -488,7 +465,6 @@ export default function ChatPage() {
         setConversations(newConversations);
         
         if (activeConversationId === conversationId) {
-          // If the active conversation was deleted, try to set a new active one (e.g., the most recent)
           const sortedRemaining = [...newConversations].sort((a,b) => b.timestamp - a.timestamp);
           setActiveConversationId(sortedRemaining.length > 0 ? sortedRemaining[0].id : null);
         }
@@ -498,27 +474,24 @@ export default function ChatPage() {
     });
   };
 
-  // Determine if sample queries should be displayed
   const displaySampleQueries = !activeConversation || (activeConversation.messages && activeConversation.messages.length === 0);
 
   return (
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" className="border-r">
         <SidebarHeader className="p-0 border-b border-sidebar-border">
-          <div className="flex items-center h-14 px-3"> {/* Wrapper for title and toggle */}
+          <div className="flex items-center h-14 px-3">
             <SidebarTrigger asChild>
               <Button
                 variant="ghost"
                 className="flex-grow justify-start h-auto py-2 px-2 text-sidebar-foreground hover:bg-sidebar-accent focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
               >
-                {/* Content for expanded sidebar */}
                 <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
                   <span className="text-sm font-medium text-muted-foreground whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:opacity-0">
                     DeepReact Chat
                   </span>
                   <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
                 </div>
-                {/* Content for collapsed (icon-only) sidebar */}
                 <div className="hidden items-center justify-center group-data-[collapsible=icon]:flex">
                   <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
                 </div>
@@ -528,12 +501,12 @@ export default function ChatPage() {
           </div>
            <div className="p-2">
             <Button
-              variant="default" // Use primary color
+              variant="default"
               onClick={handleNewChat}
-              className="w-full flex items-center justify-start text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-start" // justify-start for collapsed
+              className="w-full flex items-center justify-start text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-start"
               title="New Chat"
             >
-              <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" /> {/* Icon always visible */}
+              <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
               <span className="ml-2 whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:ml-0">
                 New Chat
               </span>
@@ -551,7 +524,6 @@ export default function ChatPage() {
             <SidebarMenu className="p-2 space-y-1">
               {groupedAndSortedConversations.map(group => (
                 <div key={group.title}>
-                  {/* Group Title - only show if there are conversations in this group */}
                   {group.conversations.length > 0 && (
                      <div className="px-3 py-2 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">
                        {group.title}
@@ -561,7 +533,7 @@ export default function ChatPage() {
                     <SidebarMenuItem 
                       key={conv.id} 
                       isActive={conv.id === activeConversationId}
-                      className="group/conv-item flex items-center justify-between flex-nowrap rounded-md" // flex-nowrap is important
+                      className="group/conv-item flex items-center justify-between flex-nowrap rounded-md"
                     >
                       {editingConversation?.id === conv.id ? (
                         <div className="flex items-center gap-2 px-2 py-1 w-full">
@@ -584,15 +556,14 @@ export default function ChatPage() {
                           <SidebarMenuButton
                             onClick={() => handleSelectConversation(conv.id)}
                             tooltip={{ children: conv.title, side: 'right', align: 'center' }}
-                            className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center min-w-0" // min-w-0 for truncation
+                            className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center min-w-0"
                           >
-                            <div className="flex items-center gap-2 overflow-hidden"> {/* Overflow hidden for inner div */}
+                            <div className="flex items-center gap-2 overflow-hidden">
                               <MessageSquare size={18} className="text-muted-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
                               <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
                             </div>
                           </SidebarMenuButton>
                           
-                          {/* Options menu, ensure it doesn't get pushed out */}
                           <div className="flex-shrink-0 group-data-[collapsible=icon]:hidden">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -600,7 +571,7 @@ export default function ChatPage() {
                                   variant="ghost" 
                                   size="icon" 
                                   className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[[data-active=true]]/conv-item:hover:text-inherit/80"
-                                  onClick={(e) => e.stopPropagation()} // Prevent item click
+                                  onClick={(e) => e.stopPropagation()}
                                 >
                                   <MoreHorizontal size={16} />
                                 </Button>
@@ -628,8 +599,6 @@ export default function ChatPage() {
           <SidebarMenuButton
             tooltip={{ children: "User Profile", side: 'right', align: 'center' }}
             className="w-full group-data-[collapsible=icon]:justify-center"
-            // Add onClick handler if this button should do something, e.g., open a profile modal
-            // onClick={() => console.log("Profile clicked")} 
           >
             <User size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
             <span className="truncate group-data-[collapsible=icon]:hidden">
@@ -643,6 +612,14 @@ export default function ChatPage() {
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
             <div className="flex items-center">
+              {/* Mobile Sidebar Trigger */}
+              <div className="md:hidden mr-2">
+                <SidebarTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Open sidebar">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SidebarTrigger>
+              </div>
               <ChatLogo className="h-8 w-8 text-primary mr-3" />
               <h1 className="text-xl font-semibold text-foreground">DeepReact Chat</h1>
             </div>
