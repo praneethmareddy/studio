@@ -7,16 +7,21 @@ import type { Message, Conversation } from '@/lib/types';
 import { ChatHistory } from '@/components/chat/ChatHistory';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { ChatLogo } from '@/components/icons/ChatLogo';
-// import { summarizeChatHistory } from '@/ai/flows/summarize-chat-history'; // Commented out for echo response
-// import { generateResponse } from '@/ai/flows/generate-response'; // Commented out for echo response
 import { SampleQueries } from '@/components/sample-queries/SampleQueries';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Menu, Download, RefreshCw, ThumbsUp, ThumbsDown, Copy } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User } from 'lucide-react';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,7 +52,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
-import { isToday, isYesterday, subDays, format, differenceInDays } from 'date-fns';
+import { isToday, isYesterday, differenceInDays, format } from 'date-fns';
 
 const CONVERSATIONS_STORAGE_KEY = 'deepReactConversations';
 
@@ -77,7 +82,6 @@ const groupConversations = (conversations: Conversation[]): GroupedConversations
   const finalGroups: GroupedConversations = {};
   const now = new Date();
 
-  // Sort conversations by timestamp descending before grouping
   const sortedConversations = [...conversations].sort((a, b) => b.timestamp - a.timestamp);
 
   sortedConversations.forEach(conv => {
@@ -93,13 +97,12 @@ const groupConversations = (conversations: Conversation[]): GroupedConversations
     } else if (differenceInDays(now, convDate) < 30) {
       groupKey = 'Previous 30 Days';
     } else {
-      groupKey = format(convDate, 'MMMM yyyy'); // e.g., April 2024
+      groupKey = format(convDate, 'MMMM yyyy'); 
     }
     
     if (!finalGroups[groupKey]) {
       finalGroups[groupKey] = [];
     }
-    // Since conversations are already sorted, pushing them maintains order within the group
     finalGroups[groupKey].push(conv); 
   });
   return finalGroups;
@@ -119,6 +122,7 @@ export default function ChatPage() {
   const [editingConversationTitleText, setEditingConversationTitleText] = useState<string>('');
   
   const [chatInputValue, setChatInputValue] = useState('');
+  const [selectedModel, setSelectedModel] = useState<string>('llama3'); // Default model
 
   const [alertDialogState, setAlertDialogState] = useState<AlertDialogState>({
     isOpen: false,
@@ -137,6 +141,10 @@ export default function ChatPage() {
           if (!activeConversationId && loadedConversations.length > 0) {
             const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
              setActiveConversationId(mostRecent.id);
+          } else if (activeConversationId && !loadedConversations.find(c => c.id === activeConversationId)) {
+            // If activeConversationId is set but not found (e.g., after deletion and reload)
+            const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
+            setActiveConversationId(mostRecent ? mostRecent.id : null);
           }
         }
       }
@@ -148,20 +156,37 @@ export default function ChatPage() {
         variant: "destructive",
       });
     }
-  }, [activeConversationId, toast]); 
+  }, []); // Load conversations once on mount
 
   useEffect(() => {
+    // This effect ensures that if activeConversationId becomes invalid
+    // (e.g. the conversation was deleted), we try to select a valid one.
+    if (conversations.length > 0 && activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
+        const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
+        setActiveConversationId(mostRecent ? mostRecent.id : null);
+    } else if (conversations.length === 0 && activeConversationId) {
+        setActiveConversationId(null);
+    }
+  }, [conversations, activeConversationId]);
+
+
+  useEffect(() => {
+    // Persist conversations to localStorage whenever they change
+    // But skip if it's the initial empty array before loading from localStorage
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
-      try {
-        localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations));
-      } catch (error) {
-        console.error("Failed to save conversations to localStorage", error);
-        toast({
-          title: "Error",
-          description: "Could not save chat history.",
-          variant: "destructive",
-        });
-      }
+        try {
+            localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations));
+        } catch (error) {
+            console.error("Failed to save conversations to localStorage", error);
+            toast({
+            title: "Error",
+            description: "Could not save chat history.",
+            variant: "destructive",
+            });
+        }
+    } else if (conversations.length === 0 && localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
+        // If conversations become empty, clear localStorage too
+        localStorage.removeItem(CONVERSATIONS_STORAGE_KEY);
     }
   }, [conversations, toast]);
 
@@ -218,6 +243,8 @@ export default function ChatPage() {
 
   const handleSampleQueryClick = (query: string) => {
     setChatInputValue(query);
+    // Optionally, automatically submit the query or focus the input
+    // For now, just populates the input
   };
 
   const handleSendMessage = useCallback(async (text: string) => {
@@ -251,15 +278,33 @@ export default function ChatPage() {
           : conv
       );
     }
+    // Sort conversations to ensure the latest active one is at the top if it was an existing one
+    updatedConversations.sort((a, b) => b.timestamp - a.timestamp);
     setConversations(updatedConversations); 
     setChatInputValue('');
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 500)); 
-      
+      const backendResponse = await fetch('http://localhost:9000/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: text,
+          model: selectedModel,
+        }),
+      });
+
+      if (!backendResponse.ok) {
+        const errorData = await backendResponse.text();
+        throw new Error(`HTTP error! status: ${backendResponse.status}, message: ${errorData}`);
+      }
+
+      const aiResponseText = await backendResponse.json(); 
+
       const newAiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: `Echo: ${text}\n\nThis is a **bold** and *italic* example.\n\`\`\`javascript\nconsole.log("Hello from AI!");\n\`\`\`\n- Item 1\n- Item 2\n\nHere's a table:\n\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |\n| Cell 3   | Cell 4   |`,
+        text: typeof aiResponseText === 'string' ? aiResponseText : "Error: Unexpected response format from AI.",
         sender: 'ai',
         timestamp: Date.now(),
       };
@@ -269,19 +314,32 @@ export default function ChatPage() {
           conv.id === currentConversationId
             ? { ...conv, messages: [...conv.messages, newAiMessage], timestamp: Date.now() }
             : conv
-        )
+        ).sort((a, b) => b.timestamp - a.timestamp) // Re-sort after adding AI message
       );
-    } catch (error) {
-      console.error('Error generating echo response:', error);
+    } catch (error: any) {
+      console.error('Error sending message to backend:', error);
       toast({
-        title: "Echo Error",
-        description: "Sorry, I couldn't generate an echo response.",
+        title: "API Error",
+        description: `Sorry, I couldn't get a response. ${error.message}`,
         variant: "destructive",
       });
+       const errorAiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: "Sorry, I couldn't connect to the AI. Please check if the backend server is running or try again later.",
+        sender: 'ai',
+        timestamp: Date.now(),
+      };
+      setConversations(prevConvs =>
+        prevConvs.map(conv =>
+          conv.id === currentConversationId
+            ? { ...conv, messages: [...conv.messages, errorAiMessage], timestamp: Date.now() }
+            : conv
+        ).sort((a, b) => b.timestamp - a.timestamp)
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [activeConversationId, conversations, toast]);
+  }, [activeConversationId, conversations, toast, selectedModel]);
 
   const handleStartEditMessage = (message: Message) => {
     setEditingMessage(message);
@@ -297,19 +355,17 @@ export default function ChatPage() {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
           if (messageIndex === -1) return conv;
   
-          // Remove the original message and all subsequent messages
           const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
             messages: messagesUpToEdit,
-            timestamp: Date.now(), // Update conversation timestamp
+            timestamp: Date.now(), 
           };
         }
         return conv;
-      });
+      }).sort((a,b) => b.timestamp - a.timestamp); // Ensure sort order is maintained
     });
   
-    // Ensure state update completes before sending new message
     await new Promise(resolve => setTimeout(resolve, 0)); 
     await handleSendMessage(editingMessageText.trim()); 
   
@@ -334,15 +390,20 @@ export default function ChatPage() {
           if (conv.id === activeConversationId) {
             const messageIndex = conv.messages.findIndex(msg => msg.id === messageId);
             if (messageIndex !== -1) {
+              // Keep only messages before the one being deleted
+              const updatedMessages = conv.messages.slice(0, messageIndex);
               return {
                 ...conv,
-                messages: conv.messages.slice(0, messageIndex),
-                timestamp: Date.now()
+                messages: updatedMessages,
+                // Update timestamp only if messages are left, or it's a new chat
+                timestamp: updatedMessages.length > 0 ? Date.now() : conv.timestamp 
               };
             }
           }
           return conv;
-        }));
+        }).filter(conv => conv.messages.length > 0 || conv.id !== activeConversationId) // Remove empty conversations unless it's not active
+         .sort((a,b) => b.timestamp - a.timestamp)
+        );
         toast({ title: "Message and subsequent messages deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
       }
@@ -410,17 +471,15 @@ export default function ChatPage() {
           const aiMessageIndex = conv.messages.findIndex(msg => msg.id === messageId && msg.sender === 'ai');
           if (aiMessageIndex > 0 && conv.messages[aiMessageIndex - 1].sender === 'user') { 
             userPromptForAIMessage = conv.messages[aiMessageIndex - 1].text;
-            // Remove AI message and subsequent messages to allow regeneration
-            const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex); 
+            const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex -1); // Slice up to user message
             return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
           }
         }
         return conv;
-      });
+      }).sort((a,b) => b.timestamp - a.timestamp);
     });
   
     if (userPromptForAIMessage) {
-      // Use timeout to ensure state update is processed before sending new message
       setTimeout(() => {
         handleSendMessage(userPromptForAIMessage);
         toast({ title: "Regenerating response..." });
@@ -452,7 +511,7 @@ export default function ChatPage() {
       conv.id === editingConversation.id 
         ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } 
         : conv
-    ));
+    ).sort((a,b) => b.timestamp - a.timestamp));
     setEditingConversation(null);
     setEditingConversationTitleText('');
     toast({ title: "Conversation title updated" });
@@ -470,7 +529,7 @@ export default function ChatPage() {
       description: "Are you sure you want to delete this entire conversation? This action cannot be undone.",
       onConfirm: () => {
         const newConversations = conversations.filter(conv => conv.id !== conversationId);
-        setConversations(newConversations);
+        setConversations(newConversations); // This will trigger the useEffect for localStorage
         
         if (activeConversationId === conversationId) {
           const sortedRemaining = [...newConversations].sort((a,b) => b.timestamp - a.timestamp);
@@ -489,7 +548,7 @@ export default function ChatPage() {
       title: "Delete All Chats?",
       description: "Are you sure you want to delete all your conversations? This action cannot be undone and will clear all chat history.",
       onConfirm: () => {
-        setConversations([]);
+        setConversations([]); // This will trigger localStorage update (removal)
         setActiveConversationId(null);
         toast({ title: "All conversations deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
@@ -647,7 +706,6 @@ export default function ChatPage() {
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
             <div className="flex items-center">
-              {/* Mobile Sidebar Trigger */}
               <div className="md:hidden mr-2">
                 <SidebarTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Open sidebar">
@@ -658,7 +716,18 @@ export default function ChatPage() {
               <ChatLogo className="h-8 w-8 text-primary mr-3" />
               <h1 className="text-xl font-semibold text-foreground">DeepReact Chat</h1>
             </div>
-            <ThemeToggleButton />
+            <div className="flex items-center gap-2">
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger className="w-[150px] h-9 text-sm">
+                  <SelectValue placeholder="Select model" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="llama3">Llama 3</SelectItem>
+                  <SelectItem value="deepseek-r1">Deepseek-R1</SelectItem>
+                </SelectContent>
+              </Select>
+              <ThemeToggleButton />
+            </div>
           </header>
           <main className="flex-1 overflow-hidden">
              {editingMessage && activeConversationId ? (
@@ -729,4 +798,3 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
-
