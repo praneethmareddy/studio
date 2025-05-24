@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,7 +9,7 @@
     --background: 0 0% 100%; /* White */
     --foreground: 222 47% 11%; /* Dark Desaturated Blue (Text on White) */
 
-    --card: 0 0% 97%; /* Very Light Grey for Card Background */
+    --card: 0 0% 97.5%; /* Slightly Lighter Grey for Card Background */
     --card-foreground: 222 47% 11%; /* Card Text Color */
 
     --popover: 0 0% 100%; /* Popover Background (White) */
@@ -61,7 +62,7 @@
     --background: 222 47% 11%;
     --foreground: 210 40% 96%;
 
-    --card: 222 47% 14%;
+    --card: 222 40% 15%; /* Slightly lighter and less saturated card for dark theme */
     --card-foreground: 210 40% 96%;
 
     --popover: 222 47% 12%;
@@ -134,3 +135,4 @@
     transform: translateY(0px);
   }
 }
+

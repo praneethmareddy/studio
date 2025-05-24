@@ -271,43 +271,37 @@ const Sidebar = React.forwardRef<
 Sidebar.displayName = "Sidebar"
 
 const SidebarTrigger = React.forwardRef<
-  React.ElementRef<typeof Button>,
-  React.ComponentProps<typeof Button> // Takes all Button props, including asChild and children
->(({ className, asChild = false, children, onClick, ...props }, ref) => {
+  HTMLButtonElement,
+  React.ComponentProps<typeof Button>
+>(({ className, asChild: asChildProp = false, children: childrenProp, onClick, ...props }, ref) => {
   const { toggleSidebar } = useSidebar();
+  const Comp = asChildProp ? Slot : Button;
 
-  const commonButtonProps = {
-    ref: ref,
-    variant: "ghost", // Default variant, can be overridden if asChild and child is a Button with its own variant
-    size: "icon",     // Default size, can be overridden
-    className: cn("h-9 w-9", className), // Base styling
-    onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
-      onClick?.(event); // Call any onClick passed to SidebarTrigger
-      toggleSidebar();
-    },
-  };
-
-  if (asChild) {
-    // When SidebarTrigger has asChild={true}, its 'children' prop MUST be a single React element.
-    // We render our ui/Button with asChild={true} (making it a Slot),
-    // and pass SidebarTrigger's 'children' to it.
-    // The Slot will then clone SidebarTrigger's child, merging commonButtonProps and other props onto it.
-    return (
-      <Button {...commonButtonProps} {...props} asChild={true}>
-        {children}
-      </Button>
-    );
-  }
-
-  // Not asChild, render default button content using ui/Button
   return (
-    <Button {...commonButtonProps} {...props} asChild={false}>
-      <PanelLeft className="h-[1.2rem] w-[1.2rem]" />
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+    <Comp
+      ref={ref}
+      variant="ghost" // Default variant, can be overridden by child if asChild
+      size="icon"     // Default size, can be overridden by child if asChild
+      className={cn("h-9 w-9", className)} // Base styling
+      onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event);
+        toggleSidebar();
+      }}
+      {...props} // Spread remaining props, could include variant, size etc. from parent
+      asChild={asChildProp && Comp === Button ? true : undefined} // Only pass asChild to ui/Button if Comp *is* ui/Button
+    >
+      {asChildProp ? (
+        childrenProp
+      ) : (
+        <>
+          <PanelLeft className="h-[1.2rem] w-[1.2rem]" />
+          <span className="sr-only">Toggle Sidebar</span>
+        </>
+      )}
+    </Comp>
   );
 });
-SidebarTrigger.displayName = "SidebarTrigger"
+SidebarTrigger.displayName = "SidebarTrigger";
 
 
 const SidebarRail = React.forwardRef<
@@ -527,18 +521,20 @@ SidebarMenu.displayName = "SidebarMenu"
 const SidebarMenuItem = React.forwardRef<
   HTMLLIElement,
   React.ComponentProps<"li"> & { isActive?: boolean }
->(({ className, isActive, ...props }, ref) => (
+>(({ className, isActive, children, ...props }, ref) => (
   <li
     ref={ref}
     data-sidebar="menu-item"
     data-active={isActive ? 'true' : 'false'}
     className={cn(
-      "group/menu-item relative rounded-md",
+      "group/menu-item relative", // Removed rounded-md from here
       "data-[active=true]:bg-[hsl(var(--sidebar-item-active-background))] data-[active=true]:text-[hsl(var(--sidebar-item-active-foreground))]",
       className
       )}
     {...props}
-  />
+  >
+    {children}
+  </li>
 ))
 SidebarMenuItem.displayName = "SidebarMenuItem"
 
@@ -592,7 +588,7 @@ const SidebarMenuButton = React.forwardRef<
         ref={ref}
         data-sidebar="menu-button"
         data-size={size}
-        className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+        className={cn(sidebarMenuButtonVariants({ variant, size }), className, "group-data-[active=true]/menu-item:bg-transparent group-data-[active=true]/menu-item:hover:bg-[hsl(var(--sidebar-accent))]")} 
         {...props}
       >
         {children}
@@ -736,7 +732,7 @@ SidebarMenuSub.displayName = "SidebarMenuSub"
 const SidebarMenuSubItem = React.forwardRef<
   HTMLLIElement,
   React.ComponentProps<"li">
->(({ ...props }, ref) => <li ref={ref} {...props} />)
+>(({children, ...props }, ref) => <li ref={ref} {...props}>{children}</li>)
 SidebarMenuSubItem.displayName = "SidebarMenuSubItem"
 
 const SidebarMenuSubButton = React.forwardRef<

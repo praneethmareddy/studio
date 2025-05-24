@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Menu } from 'lucide-react';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   Select,
@@ -142,7 +142,7 @@ export default function ChatPage() {
         const loadedConversations: Conversation[] = JSON.parse(storedConversations);
         if (loadedConversations.length > 0) {
           setConversations(loadedConversations); 
-          const currentActiveId = activeConversationId; // Capture before potential set
+          const currentActiveId = activeConversationId; 
           if (!currentActiveId && loadedConversations.length > 0) {
             const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
              setActiveConversationId(mostRecent.id);
@@ -163,12 +163,12 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
-  useEffect(() => {
+ useEffect(() => {
     if (conversations.length > 0 && activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
         const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
         setActiveConversationId(mostRecent ? mostRecent.id : null);
     } else if (conversations.length === 0 && activeConversationId) {
-        setActiveConversationId(null); // No conversations left, clear activeId
+        setActiveConversationId(null); 
     }
   }, [conversations, activeConversationId]);
 
@@ -191,7 +191,6 @@ export default function ChatPage() {
   }, [conversations, toast]);
   
   useEffect(() => {
-    // Cleanup timeout if component unmounts or dependencies change
     return () => {
       if (streamTimeoutRef.current) {
         clearTimeout(streamTimeoutRef.current);
@@ -256,12 +255,12 @@ export default function ChatPage() {
 
   const streamResponseText = useCallback((fullText: string, messageId: string, conversationId: string) => {
     let currentDisplayedText = '';
-    const parts = fullText.split(' '); // Split by word
+    const parts = fullText.split(/(\s+)/); // Split by spaces, keeping spaces
     let partIndex = 0;
 
     const appendNextPart = () => {
       if (partIndex < parts.length) {
-        currentDisplayedText += (partIndex > 0 ? ' ' : '') + parts[partIndex];
+        currentDisplayedText += parts[partIndex];
         setConversations(prevConvs =>
           prevConvs.map(conv => {
             if (conv.id === conversationId) {
@@ -270,7 +269,7 @@ export default function ChatPage() {
                 messages: conv.messages.map(msg =>
                   msg.id === messageId ? { ...msg, text: currentDisplayedText } : msg
                 ),
-                timestamp: Date.now(), // Update conversation timestamp during streaming
+                timestamp: Date.now(), 
               };
             }
             return conv;
@@ -279,8 +278,7 @@ export default function ChatPage() {
         partIndex++;
         streamTimeoutRef.current = setTimeout(appendNextPart, STREAM_DELAY_MS);
       } else {
-        setIsLoading(false); // Streaming finished
-        // Final update to ensure conversation timestamp reflects end of streaming
+        setIsLoading(false); 
         setConversations(prevConvs => 
             prevConvs.map(conv => 
                 conv.id === conversationId ? {...conv, timestamp: Date.now()} : conv
@@ -339,11 +337,17 @@ export default function ChatPage() {
       }
 
       const aiResponseText: string = await backendResponse.json(); 
+      
+      let processedResponseText = aiResponseText;
+      if (selectedModel === 'deepseek-r1') {
+        processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      }
+
 
       const newAiMessageId = (Date.now() + 1).toString();
       const aiMessagePlaceholder: Message = {
         id: newAiMessageId,
-        text: '', // Start with empty text for streaming
+        text: '', 
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
@@ -357,9 +361,7 @@ export default function ChatPage() {
         ).sort((a,b) => b.timestamp - a.timestamp)
       );
       
-      // Start streaming the actual text
-      // setIsLoading(true) is already set
-      streamResponseText(aiResponseText, newAiMessageId, currentConversationId);
+      streamResponseText(processedResponseText, newAiMessageId, currentConversationId);
 
     } catch (error: any) {
       console.error('Error sending message to backend:', error);
@@ -384,7 +386,6 @@ export default function ChatPage() {
       );
       setIsLoading(false);
     } 
-    // setIsLoading(false) is handled by streamResponseText or error catch
   }, [activeConversationId, conversations, toast, selectedModel, streamResponseText]);
 
   const handleStartEditMessage = (message: Message) => {
@@ -395,14 +396,13 @@ export default function ChatPage() {
   const handleSaveEditedMessage = async () => {
     if (!editingMessage || !activeConversationId || !editingMessageText.trim()) return;
   
-    // Truncate conversation from this message onwards
     setConversations(prev => {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
           if (messageIndex === -1) return conv;
   
-          const messagesUpToEdit = conv.messages.slice(0, messageIndex); // Keep messages BEFORE the edited one
+          const messagesUpToEdit = conv.messages.slice(0, messageIndex); 
           return {
             ...conv,
             messages: messagesUpToEdit,
@@ -413,10 +413,8 @@ export default function ChatPage() {
       }).sort((a,b) => b.timestamp - a.timestamp);
     });
   
-    // Use a micro-timeout to ensure state update completes before resending
     await new Promise(resolve => setTimeout(resolve, 0)); 
     
-    // Resend the edited text as a new message
     await handleSendMessage(editingMessageText.trim()); 
   
     setEditingMessage(null);
@@ -565,8 +563,12 @@ export default function ChatPage() {
         setConversations(newConversations);
         
         if (activeConversationId === conversationId) {
-          const sortedRemaining = [...newConversations].sort((a,b) => b.timestamp - a.timestamp);
-          setActiveConversationId(sortedRemaining.length > 0 ? sortedRemaining[0].id : null);
+          if (newConversations.length > 0) {
+            const sortedRemaining = [...newConversations].sort((a,b) => b.timestamp - a.timestamp);
+            setActiveConversationId(sortedRemaining[0].id);
+          } else {
+            setActiveConversationId(null);
+          }
         }
         toast({ title: "Conversation deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
@@ -739,7 +741,7 @@ export default function ChatPage() {
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
             <div className="flex items-center">
-              <div className="md:hidden mr-2"> {/* Only show on md and smaller, effectively mobile */}
+              <div className="md:hidden mr-2"> 
                 <SidebarTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Open sidebar">
                     <PanelLeft className="h-5 w-5" />
@@ -839,3 +841,4 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
+
