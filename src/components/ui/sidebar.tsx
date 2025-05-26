@@ -8,7 +8,7 @@ import { PanelLeft } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button" // Ensure buttonVariants is imported
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
@@ -272,27 +272,34 @@ Sidebar.displayName = "Sidebar"
 
 const SidebarTrigger = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<typeof Button>
+  React.ComponentProps<typeof Button> & { asChild?: boolean; children?: React.ReactNode }
 >(({ className, asChild: asChildProp = false, children: childrenProp, onClick, ...props }, ref) => {
   const { toggleSidebar } = useSidebar();
-  const Comp = asChildProp ? Slot : Button;
+  // Use !!asChildProp to ensure it's a boolean for the Comp decision
+  const Comp = !!asChildProp ? Slot : Button;
+  const effectiveAsChild = !!asChildProp; // Ensure this is strictly boolean
 
   return (
     <Comp
       ref={ref}
-      variant="ghost" // Default variant, can be overridden by child if asChild
-      size="icon"     // Default size, can be overridden by child if asChild
-      className={cn("h-9 w-9", className)} // Base styling
+      className={cn(
+        // Use buttonVariants to apply base button styling if Comp is Button
+        // If asChild is true, these might be overridden by the child component's classes
+        Comp === Button && !effectiveAsChild && buttonVariants({ variant: 'ghost', size: 'icon' }),
+        "h-9 w-9", // Default size if not overridden
+        className
+      )}
       onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         toggleSidebar();
       }}
-      {...props} // Spread remaining props, could include variant, size etc. from parent
-      asChild={asChildProp && Comp === Button ? true : undefined} // Only pass asChild to ui/Button if Comp *is* ui/Button
+      // Pass asChild only if Comp is Button and asChildProp is true
+      // or if Comp is Slot (meaning asChildProp was true)
+      asChild={Comp === Button ? effectiveAsChild : undefined}
+      {...props} // Spread remaining props
     >
-      {asChildProp ? (
-        childrenProp
-      ) : (
+      {/* If asChild is true, render childrenProp, otherwise render default icon */}
+      {effectiveAsChild ? childrenProp : (
         <>
           <PanelLeft className="h-[1.2rem] w-[1.2rem]" />
           <span className="sr-only">Toggle Sidebar</span>
@@ -527,8 +534,19 @@ const SidebarMenuItem = React.forwardRef<
     data-sidebar="menu-item"
     data-active={isActive ? 'true' : 'false'}
     className={cn(
-      "group/menu-item relative", // Removed rounded-md from here
-      "data-[active=true]:bg-[hsl(var(--sidebar-item-active-background))] data-[active=true]:text-[hsl(var(--sidebar-item-active-foreground))]",
+      "group/menu-item relative rounded-md", // Added rounded-md here
+      "data-[active=true]:bg-[hsl(var(--sidebar-item-active-background))]",
+      "data-[active=true]:text-[hsl(var(--sidebar-item-active-foreground))]",
+      // Active item pill indicator
+      "data-[active=true]:before:content-['']",
+      "data-[active=true]:before:absolute",
+      "data-[active=true]:before:left-0",
+      "data-[active=true]:before:top-1/2",
+      "data-[active=true]:before:-translate-y-1/2",
+      "data-[active=true]:before:h-3/5", // Adjust height as needed
+      "data-[active=true]:before:w-1", // Width of the pill
+      "data-[active=true]:before:bg-primary", // Use primary color for the pill
+      "data-[active=true]:before:rounded-r-sm", // Optional: round the pill
       className
       )}
     {...props}
@@ -588,7 +606,13 @@ const SidebarMenuButton = React.forwardRef<
         ref={ref}
         data-sidebar="menu-button"
         data-size={size}
-        className={cn(sidebarMenuButtonVariants({ variant, size }), className, "group-data-[active=true]/menu-item:bg-transparent group-data-[active=true]/menu-item:hover:bg-[hsl(var(--sidebar-accent))]")} 
+         className={cn(
+          sidebarMenuButtonVariants({ variant, size }),
+          // Ensure the button background is transparent when its parent LI is active
+          // so the LI's active background (with pill) shows through.
+          "group-data-[active=true]/menu-item:bg-transparent group-data-[active=true]/menu-item:text-[hsl(var(--sidebar-item-active-foreground))] group-data-[active=true]/menu-item:hover:bg-[hsl(var(--sidebar-accent))]",
+          className
+        )}
         {...props}
       >
         {children}

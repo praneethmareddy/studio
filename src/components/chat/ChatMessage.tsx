@@ -117,16 +117,19 @@ export function ChatMessage({
           className={cn(
             'max-w-[75%] shadow-md flex flex-col',
              isUser 
-               ? 'bg-primary text-primary-foreground rounded-xl rounded-br-sm' 
-               : 'bg-card text-card-foreground rounded-xl rounded-bl-sm'
+               ? 'bg-primary text-primary-foreground rounded-lg rounded-br-none' 
+               : 'bg-card text-card-foreground rounded-lg rounded-bl-none'
           )}
         >
           {message.file && (
-            <div className="px-3 pt-2 pb-1 border-b border-primary/20 dark:border-card-foreground/20">
+             <div className={cn(
+                "px-3 pt-2 pb-1", 
+                isUser ? "text-primary-foreground/90" : "text-card-foreground/90",
+              )}>
               <div className="flex items-center gap-2 text-xs">
                 <FileText size={16} className={cn(isUser ? "text-primary-foreground/80" : "text-muted-foreground")} />
-                <span className={cn("truncate", isUser ? "text-primary-foreground" : "text-card-foreground")}>{message.file.name}</span>
-                <span className={cn(isUser ? "text-primary-foreground/70" : "text-muted-foreground/80")}>
+                <span className="truncate font-medium">{message.file.name}</span>
+                <span className={cn("ml-auto", isUser ? "text-primary-foreground/70" : "text-muted-foreground/80")}>
                   ({(message.file.size / 1024).toFixed(1)} KB)
                 </span>
               </div>
@@ -134,7 +137,7 @@ export function ChatMessage({
           )}
           <div className={cn("p-3 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
             {isUser ? (
-              message.text // User message text is pre-wrapped by browser usually
+              message.text 
             ) : (
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {message.text}
