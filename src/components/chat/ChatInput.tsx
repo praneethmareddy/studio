@@ -64,7 +64,7 @@ export function ChatInput({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col p-4 border-t border-border bg-background">
       {attachedFile && (
-        <div className="mb-2 flex items-center justify-between p-2 border border-input rounded-md bg-card text-sm">
+        <div className="mb-2 flex items-center justify-between p-2 border border-input rounded-lg bg-card text-sm">
           <div className="flex items-center gap-2 truncate">
             <Paperclip size={16} className="text-muted-foreground flex-shrink-0" />
             <span className="text-card-foreground truncate" title={attachedFile.name}>{attachedFile.name}</span>
@@ -107,7 +107,7 @@ export function ChatInput({
           onChange={(e) => onValueChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={attachedFile ? "Add an optional message..." : "Type your message or attach a file..."}
-          className="flex-1 resize-none bg-card border-input focus:ring-ring focus:ring-offset-0 pr-12"
+          className="flex-1 resize-none bg-card border-input focus:ring-ring focus:ring-offset-0 pr-12 hover:shadow-md transition-shadow duration-300 ease-in-out"
           rows={1}
           disabled={isLoading}
           aria-label="Chat input"

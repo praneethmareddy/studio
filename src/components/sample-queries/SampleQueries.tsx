@@ -32,7 +32,7 @@ export function SampleQueries({ queries, onQueryClick }: SampleQueriesProps) {
           <Button
             key={index}
             variant="outline"
-            className="text-left justify-start h-auto py-4 px-5 hover:bg-accent/50 w-full"
+            className="text-left justify-start h-auto py-4 px-5 hover:bg-accent/50 w-full transition-shadow duration-300 ease-in-out hover:shadow-lg"
             onClick={() => onQueryClick(query)}
           >
             <span className="truncate">{query}</span>

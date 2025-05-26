@@ -6,10 +6,10 @@
 @layer base {
   /* Light theme variables (default) */
   :root {
-    --background: 0 0% 100%; /* White - Main content background */
-    --foreground: 222 47% 11%; /* Dark Desaturated Blue (Text on White) */
+    --background: 0 0% 100%; /* Main content background */
+    --foreground: 222 47% 11%; /* Text on White */
 
-    --card: 0 0% 97.5%; /* Slightly Lighter Grey for Card Background */
+    --card: 0 0% 97.5%; /* Card Background */
     --card-foreground: 222 47% 11%; /* Card Text Color */
 
     --popover: 0 0% 100%; /* Popover Background (White) */
@@ -34,7 +34,7 @@
     --input: 220 15% 92%; /* Input background color */
     --ring: 217 91% 65%; /* Ring color for focus states */
 
-    --radius: 0.5rem;
+    --radius: 0.75rem; /* Increased from 0.5rem for a more modern feel */
 
     --chart-1: 217 91% 60%;
     --chart-2: 210 70% 65%;
@@ -86,6 +86,8 @@
     --border: 215 28% 20%;
     --input: 215 28% 17%;
     --ring: 217 91% 65%;
+
+    --radius: 0.75rem; /* Increased from 0.5rem */
 
     --chart-1: 217 91% 60%;
     --chart-2: 210 70% 65%;

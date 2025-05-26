@@ -5,7 +5,7 @@ import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { User, Bot, Pencil, Trash2, Download, Copy, RefreshCw, ThumbsUp, ThumbsDown, FileText } from 'lucide-react';
+import { User, Bot, Pencil, Trash2, Download, Copy, RefreshCw, ThumbsUp, ThumbsDown, FileText, Cpu, Brain } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import ReactMarkdown from 'react-markdown';
@@ -107,7 +107,9 @@ export function ChatMessage({
       {!isUser && (
         <Avatar className="h-8 w-8 flex-shrink-0 self-start mt-1">
           <AvatarFallback className="bg-primary text-primary-foreground">
-            <Bot size={20} />
+            {message.modelUsed === 'llama3' && <Cpu size={20} />}
+            {message.modelUsed === 'deepseek-r1' && <Brain size={20} />}
+            {(!message.modelUsed || (message.modelUsed !== 'llama3' && message.modelUsed !== 'deepseek-r1')) && <Bot size={20} />}
           </AvatarFallback>
         </Avatar>
       )}
@@ -115,7 +117,7 @@ export function ChatMessage({
       <div className={cn("flex items-end gap-1.5", isUser ? "flex-row-reverse" : "flex-row")}>
         <div
           className={cn(
-            'max-w-[75%] shadow-md flex flex-col',
+            'max-w-[75%] shadow-md flex flex-col transition-shadow duration-300 ease-in-out hover:shadow-xl',
              isUser 
                ? 'bg-primary text-primary-foreground rounded-lg rounded-br-none' 
                : 'bg-card text-card-foreground rounded-lg rounded-bl-none'
@@ -137,7 +139,7 @@ export function ChatMessage({
           )}
           <div className={cn("p-3 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
             {isUser ? (
-              message.text 
+              <span className="whitespace-pre-wrap">{message.text}</span>
             ) : (
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {message.text}

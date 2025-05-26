@@ -168,10 +168,11 @@ export default function ChatPage() {
     if (conversations.length > 0) {
         if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
             const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
-            setActiveConversationId(mostRecent.id);
+            if (mostRecent) setActiveConversationId(mostRecent.id);
+            else setActiveConversationId(null); // No conversations left
         } else if (!activeConversationId) {
             const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
-            setActiveConversationId(mostRecent.id);
+            if (mostRecent) setActiveConversationId(mostRecent.id);
         }
     } else if (conversations.length === 0 && activeConversationId) {
         setActiveConversationId(null);
@@ -282,7 +283,7 @@ export default function ChatPage() {
 
   const streamResponseText = useCallback((fullText: string, messageId: string, conversationId: string) => {
     let currentDisplayedText = '';
-    const parts = fullText.split(/(\s+)/); 
+    const parts = fullText.split(/(\s+)/); // Split by space, preserving spaces
     let partIndex = 0;
 
     const appendNextPart = () => {
@@ -316,7 +317,7 @@ export default function ChatPage() {
     appendNextPart();
   }, []);
 
-  const handleSendMessage = useCallback(async (
+ const handleSendMessage = useCallback(async (
     text: string, 
     file?: File, 
     options?: { originalFileDetails?: Message['file'] }
@@ -464,6 +465,7 @@ export default function ChatPage() {
         if (conv.id === activeConversationId) {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
           if (messageIndex === -1) return conv;
+          // Remove the original message and all subsequent messages
           const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
@@ -475,7 +477,8 @@ export default function ChatPage() {
       }).sort((a,b) => b.timestamp - a.timestamp);
     });
 
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Ensure state update for truncation completes before sending the message
+    await new Promise(resolve => setTimeout(resolve, 0)); 
     await handleSendMessage(editingMessageText.trim(), undefined, { originalFileDetails: originalMessageDetails.file });
 
     setEditingMessage(null);
@@ -511,6 +514,9 @@ export default function ChatPage() {
           return conv;
         }).filter(conv => { 
             if (conv.id === activeConversationId && conv.messages.length === 0) {
+                 // If deleting the last message makes the conversation empty, 
+                 // we could choose to delete the conversation itself, or keep it empty.
+                 // For now, let's keep it, but this is a point for potential refinement.
             }
             return true; 
          })
@@ -558,7 +564,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
+ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     if (!activeConversationId) return;
 
     const conversationIndex = conversations.findIndex(c => c.id === activeConversationId);
@@ -567,8 +573,8 @@ export default function ChatPage() {
     const currentConversation = conversations[conversationIndex];
     const aiMessageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
 
-    if (aiMessageIndex <= 0) {
-        toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found for this AI message.", variant: "destructive" });
+    if (aiMessageIndex <= 0) { // AI message must have a preceding user message
+        toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
         return;
     }
 
@@ -578,22 +584,20 @@ export default function ChatPage() {
         return;
     }
 
-    // Truncate messages: Keep up to and including the promptingUserMessage.
-    // This effectively removes the AI message to be regenerated and any subsequent messages.
-    const messagesUpToPrompt = currentConversation.messages.slice(0, aiMessageIndex);
+    // Truncate messages: Keep all messages up to *but not including* the AI message to be regenerated.
+    // This includes the promptingUserMessage.
+    const messagesUpToAIResponseIndex = currentConversation.messages.slice(0, aiMessageIndex);
 
-    // Update the conversation state to reflect the truncation immediately.
-    // The new AI message will be appended to this truncated list.
     setConversations(prevConvs =>
         prevConvs.map(conv =>
             conv.id === activeConversationId
-                ? { ...conv, messages: messagesUpToPrompt, timestamp: Date.now() }
+                ? { ...conv, messages: messagesUpToAIResponseIndex, timestamp: Date.now() }
                 : conv
         ).sort((a, b) => b.timestamp - a.timestamp)
     );
-
+    
     // Ensure state update for truncation completes before fetching new AI response
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0)); 
 
     setIsLoading(true);
     toast({ title: "Regenerating AI response..." });
@@ -601,7 +605,7 @@ export default function ChatPage() {
     let queryTextForBackend = promptingUserMessage.text;
     if (promptingUserMessage.file) {
         queryTextForBackend = `[File Attached: ${promptingUserMessage.file.name}] ${promptingUserMessage.text}`.trim();
-        if (!promptingUserMessage.text.trim() && promptingUserMessage.file) { // if only file was sent
+        if (!promptingUserMessage.text.trim() && promptingUserMessage.file) { 
              queryTextForBackend = `File: ${promptingUserMessage.file.name}`;
         }
     }
@@ -610,7 +614,7 @@ export default function ChatPage() {
         const backendResponse = await fetch('http://localhost:9000/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: queryTextForBackend, model: selectedModel }),
+            body: JSON.stringify({ query: queryTextForBackend, model: selectedModel }), // Use selectedModel
         });
 
         if (!backendResponse.ok) {
@@ -620,7 +624,7 @@ export default function ChatPage() {
 
         let aiResponseText: string = await backendResponse.json();
         let processedResponseText = aiResponseText;
-        if (selectedModel === 'deepseek-r1') {
+        if (selectedModel === 'deepseek-r1') { // Use selectedModel for processing
             processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         }
 
@@ -630,16 +634,14 @@ export default function ChatPage() {
             text: '',
             sender: 'ai',
             timestamp: Date.now(),
-            modelUsed: selectedModel,
+            modelUsed: selectedModel, // Store the model used for this response
         };
 
-        // Add placeholder for streaming to the already truncated conversation
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === activeConversationId) {
-                    // Ensure we are appending to the correctly truncated message list
-                    const currentMessages = conv.messages; // Should be messagesUpToPrompt
-                    return { ...conv, messages: [...currentMessages, aiMessagePlaceholder], timestamp: Date.now() };
+                    // Append to the correctly truncated message list
+                    return { ...conv, messages: [...conv.messages, aiMessagePlaceholder], timestamp: Date.now() };
                 }
                 return conv;
             })
@@ -664,13 +666,12 @@ export default function ChatPage() {
           text: "Sorry, I couldn't regenerate the response. Please try again.",
           sender: 'ai',
           timestamp: Date.now(),
-          modelUsed: selectedModel,
+          modelUsed: selectedModel, // Store model used even for error
         };
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                  if (conv.id === activeConversationId) {
-                    const currentMessages = conv.messages; // Should be messagesUpToPrompt
-                    return { ...conv, messages: [...currentMessages, errorAiMessage], timestamp: Date.now() };
+                    return { ...conv, messages: [...conv.messages, errorAiMessage], timestamp: Date.now() };
                 }
                 return conv;
             }).sort((a,b) => b.timestamp - a.timestamp)
@@ -721,6 +722,14 @@ export default function ChatPage() {
       onConfirm: () => {
         const newConversations = conversations.filter(conv => conv.id !== conversationId);
         setConversations(newConversations); 
+        
+        if (activeConversationId === conversationId) {
+            if (newConversations.length > 0) {
+                setActiveConversationId([...newConversations].sort((a,b) => b.timestamp - a.timestamp)[0].id);
+            } else {
+                setActiveConversationId(null);
+            }
+        }
         toast({ title: "Conversation deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
       },
@@ -735,6 +744,7 @@ export default function ChatPage() {
       description: "Are you sure you want to delete all your conversations? This action cannot be undone and will clear all chat history.",
       onConfirm: () => {
         setConversations([]); 
+        setActiveConversationId(null);
         toast({ title: "All conversations deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
       },
@@ -772,7 +782,7 @@ export default function ChatPage() {
             <Button
               variant="default"
               onClick={handleNewChat}
-              className="w-full flex items-center justify-start text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-start hover:animate-shadow-pulse"
+              className="w-full flex items-center justify-start text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-lg group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-start hover:animate-shadow-pulse"
               title="New Chat"
             >
               <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
@@ -830,7 +840,7 @@ export default function ChatPage() {
                     <SidebarMenuItem
                       key={conv.id}
                       isActive={conv.id === activeConversationId}
-                      className="group/conv-item flex items-center justify-between flex-nowrap rounded-md"
+                      className="group/conv-item flex items-center justify-between flex-nowrap rounded-lg"
                     >
                       {editingConversation?.id === conv.id ? (
                         <div className="flex items-center gap-2 px-2 py-1 w-full">
@@ -931,7 +941,7 @@ export default function ChatPage() {
             </div>
             <div className="flex items-center gap-2">
               <Select value={selectedModel} onValueChange={setSelectedModel}>
-                <SelectTrigger className="w-[170px] h-9 text-sm">
+                <SelectTrigger className="w-[170px] h-9 text-sm hover:shadow-md transition-shadow duration-300 ease-in-out">
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
@@ -952,12 +962,12 @@ export default function ChatPage() {
           </header>
           <main className="flex-1 overflow-hidden">
              {editingMessage && activeConversationId ? (
-                <div className="p-4 border-t border-border bg-card">
+                <div className="p-4 border-t border-border bg-card rounded-lg m-2">
                   <h3 className="text-sm font-semibold mb-2 text-card-foreground">Edit and resend message:</h3>
                   <Textarea
                     value={editingMessageText}
                     onChange={(e) => setEditingMessageText(e.target.value)}
-                    className="mb-2 bg-input text-foreground border-border focus:ring-ring"
+                    className="mb-2 bg-input text-foreground border-input focus:ring-ring"
                     rows={3}
                     autoFocus
                   />
@@ -1022,4 +1032,3 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
-
