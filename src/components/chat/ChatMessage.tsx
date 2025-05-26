@@ -117,16 +117,15 @@ export function ChatMessage({
       <div className={cn("flex items-end gap-1.5", isUser ? "flex-row-reverse" : "flex-row")}>
         <div
           className={cn(
-            'max-w-[75%] shadow-md flex flex-col transition-shadow duration-300 ease-in-out hover:shadow-xl',
+            'max-w-[75%] rounded-lg flex flex-col transition-shadow duration-300 ease-in-out hover:shadow-xl shadow-md',
              isUser 
-               ? 'bg-primary text-primary-foreground rounded-lg rounded-br-none' 
-               : 'bg-card text-card-foreground rounded-lg rounded-bl-none'
+               ? 'bg-primary text-primary-foreground rounded-br-none' 
+               : 'bg-card text-card-foreground rounded-bl-none'
           )}
         >
-          {/* File Info Section */}
           {message.file && (
              <div className={cn(
-                "px-3 pt-3 pb-1.5", // Standardized padding for file block
+                "px-3 pt-3 pb-1.5", 
                 isUser ? "text-primary-foreground/90" : "text-card-foreground/90",
               )}>
               <div className="flex items-center gap-2 text-xs">
@@ -139,17 +138,15 @@ export function ChatMessage({
             </div>
           )}
 
-          {/* Separator Line */}
           {message.file && message.text && message.text.trim() !== '' && (
             <hr className={cn(
-              "mx-3 border-t", 
+              "mx-3 my-1.5 border-t", 
               isUser ? "border-primary-foreground/30" : "border-card-foreground/20"
             )} />
           )}
           
-          {/* Text Content Section */}
           {message.text && message.text.trim() !== '' && (
-            <div className={cn("p-3 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
+            <div className={cn("px-3 py-2 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
               {isUser ? (
                 <span className="whitespace-pre-wrap">{message.text}</span>
               ) : (
@@ -160,22 +157,20 @@ export function ChatMessage({
             </div>
           )}
 
-          {/* Timestamp and Model Label Section */}
-          <div className="flex items-center self-end px-3 pb-1.5 pt-0 text-xs"> {/* pt-0 to minimize top space */}
-            {!isUser && modelUsedLabel && (
-              <span className="mr-2 opacity-70 text-muted-foreground/80">via {modelUsedLabel}</span>
-            )}
-            <span
-              className={cn(
-                isUser ? 'text-primary-foreground/70' : 'text-muted-foreground/90'
+          {(message.timestamp || (!isUser && modelUsedLabel)) && (
+            <div className="flex items-center self-end px-3 pb-1.5 pt-0 text-[11px] leading-tight opacity-80">
+              {!isUser && modelUsedLabel && (
+                <span className="mr-2">via {modelUsedLabel}</span>
               )}
-            >
-              {format(new Date(message.timestamp), 'p')}
-            </span>
-          </div>
+              {message.timestamp && (
+                <span className={cn(isUser ? 'text-primary-foreground/70' : 'text-muted-foreground/90')}>
+                  {format(new Date(message.timestamp), 'p')}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Action Buttons Container */}
         <div className="flex flex-col sm:flex-row items-center gap-0.5 opacity-0 group-hover/message:opacity-100 focus-within:opacity-100 transition-opacity duration-200 mb-1 self-center">
           {isUser && (
             <>
@@ -184,7 +179,7 @@ export function ChatMessage({
               <ActionButton onClick={onDelete} icon={Trash2} tooltipText="Delete" className="hover:text-destructive text-destructive/80" />
             </>
           )}
-          {!isUser && message.text.trim() !== '' && ( // Only show AI actions if there's text (e.g. not just for an error placeholder)
+          {!isUser && message.text.trim() !== '' && (
             <>
               <ActionButton onClick={() => onCopyAIMessage(message.text)} icon={Copy} tooltipText="Copy" />
               <ActionButton onClick={onDownloadAIMessage} icon={Download} tooltipText="Download" />
@@ -193,6 +188,9 @@ export function ChatMessage({
               <ActionButton onClick={onDislikeAIMessage} icon={ThumbsDown} tooltipText="Dislike" />
             </>
           )}
+           {!isUser && message.file && message.text.trim() === '' && ( // Show download if only file from AI
+             <ActionButton onClick={onDownloadAIMessage} icon={Download} tooltipText="Download File" />
+           )}
         </div>
       </div>
 

@@ -136,6 +136,7 @@ export default function ChatPage() {
   const streamTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 
+  // Effect for initial loading of conversations and active ID from localStorage
   useEffect(() => {
     try {
       const storedConversations = localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
@@ -146,7 +147,7 @@ export default function ChatPage() {
           const currentActiveIdFromStorage = localStorage.getItem('activeConversationId');
           if (currentActiveIdFromStorage && loadedConversations.find(c => c.id === currentActiveIdFromStorage)) {
             setActiveConversationId(currentActiveIdFromStorage);
-          } else if (loadedConversations.length > 0) {
+          } else if (loadedConversations.length > 0) { // If stored ID is invalid or not present, pick most recent
             const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
             setActiveConversationId(mostRecent.id);
           }
@@ -163,6 +164,7 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
+ // Effect for saving activeConversationId to localStorage
  useEffect(() => {
     if (activeConversationId) {
         localStorage.setItem('activeConversationId', activeConversationId);
@@ -171,7 +173,7 @@ export default function ChatPage() {
     }
   }, [activeConversationId]);
 
-
+ // Effect for saving conversations to localStorage
  useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
         try {
@@ -185,26 +187,24 @@ export default function ChatPage() {
             });
         }
     } else if (conversations.length === 0 && localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
+        // If conversations array is empty and there was something in storage, remove it.
         localStorage.removeItem(CONVERSATIONS_STORAGE_KEY);
     }
   }, [conversations, toast]);
 
+  // Effect to ensure activeConversationId remains valid if conversations change (e.g., deletion)
   useEffect(() => {
-    // This effect ensures activeConversationId remains valid
-    if (conversations.length > 0) {
-        if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
-            // Active conversation was deleted, select the most recent
-            const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
-            setActiveConversationId(mostRecent ? mostRecent.id : null);
-        } else if (!activeConversationId) {
-            // No active conversation, select the most recent
-            const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
-            setActiveConversationId(mostRecent ? mostRecent.id : null);
-        }
+    if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
+      // The active conversation ID is set, but it no longer exists in the conversations list.
+      // Try to set to the most recent existing conversation, or null if none exist.
+      const mostRecent = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
+      setActiveConversationId(mostRecent ? mostRecent.id : null);
     } else if (conversations.length === 0 && activeConversationId) {
-        // No conversations left, clear active ID
-        setActiveConversationId(null);
+      // There are no conversations left, but an activeConversationId is still set. Clear it.
+      setActiveConversationId(null);
     }
+    // Note: We DO NOT automatically select a conversation if activeConversationId is null and conversations exist.
+    // This is to allow the "New Chat" state (activeConversationId = null) to persist.
   }, [conversations, activeConversationId]);
 
 
@@ -426,6 +426,7 @@ export default function ChatPage() {
       if (currentConversationId) { 
          streamResponseText(processedResponseText, newAiMessageId, currentConversationId);
       } else {
+        // This case should ideally not be reached if a new conversation is always created.
         console.error("Error: No active conversation ID to stream response to.");
         setIsLoading(false); 
       }
@@ -475,6 +476,8 @@ export default function ChatPage() {
         if (conv.id === activeConversationId) {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
           if (messageIndex === -1) return conv;
+          // Truncate messages up to the point of the message being edited.
+          // The original user message being edited will be "resent" by handleSendMessage.
           const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
@@ -486,7 +489,10 @@ export default function ChatPage() {
       }).sort((a,b) => b.timestamp - a.timestamp);
     });
 
+    // Allow state to update before resending
     await new Promise(resolve => setTimeout(resolve, 0)); 
+
+    // Resend the message. Pass original file details if they existed.
     await handleSendMessage(editingMessageText.trim(), undefined, { originalFileDetails: originalMessageDetails.file });
 
     setEditingMessage(null);
@@ -525,7 +531,6 @@ export default function ChatPage() {
                  // If deleting the last message makes the conversation empty,
                  // we might want to handle its deletion or keep it as an empty chat
                  // For now, we keep it, but it won't show messages.
-                 // setActiveConversationId(null); // Optionally, make no conversation active
             }
             return true; 
          })
@@ -579,10 +584,9 @@ export default function ChatPage() {
     let promptingUserMessage: Message | undefined;
     let baseMessagesForRegen: Message[] = [];
 
-    // Prepare data and update conversation state to truncate
     setConversations(prevConvs => {
         const convIndex = prevConvs.findIndex(c => c.id === activeConversationId);
-        if (convIndex === -1) return prevConvs; // Should not happen
+        if (convIndex === -1) return prevConvs;
 
         const currentConversation = prevConvs[convIndex];
         const aiMessageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
@@ -591,33 +595,32 @@ export default function ChatPage() {
             toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
             return prevConvs;
         }
-
+        
         const userMsg = currentConversation.messages[aiMessageIndex - 1];
         if (userMsg.sender !== 'user') {
             toast({ title: "Error", description: "Cannot regenerate. Preceding message is not from user.", variant: "destructive" });
             return prevConvs;
         }
         
-        promptingUserMessage = userMsg; // Capture for use outside this updater
-        baseMessagesForRegen = currentConversation.messages.slice(0, aiMessageIndex); // Includes user prompt, excludes AI msg and after
+        promptingUserMessage = userMsg; 
+        // Truncate to *include* the user prompt, but *exclude* the AI message being regenerated and anything after.
+        baseMessagesForRegen = currentConversation.messages.slice(0, aiMessageIndex); 
 
         const updatedConvs = [...prevConvs];
         updatedConvs[convIndex] = {
             ...currentConversation,
-            messages: baseMessagesForRegen, // Truncated messages
+            messages: baseMessagesForRegen, 
             timestamp: Date.now(),
         };
         return updatedConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
     
-    // Ensure promptingUserMessage was set (it should be if we reached here)
     if (!promptingUserMessage) {
-        console.error("Regeneration failed: prompting user message not found after state update attempt.");
+        console.error("Regeneration failed: prompting user message not captured.");
         setIsLoading(false);
         return;
     }
 
-    // Give React a tick to process the above state update before fetching
     await new Promise(resolve => setTimeout(resolve, 0)); 
 
     setIsLoading(true);
@@ -649,36 +652,30 @@ export default function ChatPage() {
             processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         }
 
-        const newAiMessageId = (Date.now() + 1).toString(); // Unique ID
+        const newAiMessageId = (Date.now() + 1).toString(); 
         const aiMessagePlaceholder: Message = {
             id: newAiMessageId,
-            text: '', // Will be filled by streaming
+            text: '', 
             sender: 'ai',
             timestamp: Date.now(),
             modelUsed: selectedModel, 
         };
         
-        // Add the placeholder to the correct conversation, using the `baseMessagesForRegen`
-        // which is the state *after* truncation.
+        // Add placeholder to the already truncated list of messages
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === activeConversationId) {
-                    // It's crucial that 'baseMessagesForRegen' reflects the state *after* truncation.
-                    // Since `baseMessagesForRegen` was captured from the *previous* setConversations's scope,
-                    // we rely on it being correct.
-                    // A more robust way if `baseMessagesForRegen` wasn't captured from the updater:
-                    // `const currentMsgs = conv.messages; // These are already truncated by the first setConversations`
-                    // `return { ...conv, messages: [...currentMsgs, aiMessagePlaceholder], ... }`
+                    // baseMessagesForRegen was captured from previous setConversations scope
+                    // It represents the state *after* truncation and before adding the placeholder
                     return { ...conv, messages: [...baseMessagesForRegen, aiMessagePlaceholder], timestamp: Date.now() };
                 }
                 return conv;
             })
         );
         
-        // Stream into the newly added placeholder
-        // activeConversationId should still be valid here
-        streamResponseText(processedResponseText, newAiMessageId, activeConversationId);
-        // setIsLoading(false) is handled by streamResponseText on completion
+        if (activeConversationId) {
+          streamResponseText(processedResponseText, newAiMessageId, activeConversationId);
+        }
 
     } catch (error: any) {
         console.error('Error regenerating AI response:', error);
@@ -694,10 +691,10 @@ export default function ChatPage() {
           timestamp: Date.now(),
           modelUsed: selectedModel, 
         };
+        // Add error message to the truncated list
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                  if (conv.id === activeConversationId) {
-                    // Add error message to the truncated list
                     return { ...conv, messages: [...baseMessagesForRegen, errorAiMessage], timestamp: Date.now() };
                 }
                 return conv;
@@ -751,7 +748,6 @@ export default function ChatPage() {
             const newConversations = prevConversations.filter(conv => conv.id !== conversationId);
             if (activeConversationId === conversationId) {
                 if (newConversations.length > 0) {
-                    // Sort by timestamp to find the most recent
                     const mostRecent = [...newConversations].sort((a, b) => b.timestamp - a.timestamp)[0];
                     setActiveConversationId(mostRecent.id);
                 } else {
@@ -1067,7 +1063,3 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
-
-
-      
-    
