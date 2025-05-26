@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Search, Menu, Paperclip, Loader2, FileText, RefreshCw, ThumbsUp, ThumbsDown, Copy, Download } from 'lucide-react';
+import Image from 'next/image'; // Import next/image
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   Select,
@@ -756,7 +757,7 @@ export default function ChatPage() {
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" className="border-r">
         <SidebarHeader className="p-0 border-b border-sidebar-border">
-          <div className="flex items-center h-14 px-3">
+           <div className="flex items-center h-14 px-3"> {/* Adjusted padding for alignment */}
             <SidebarTrigger asChild>
               <Button
                 variant="ghost"
@@ -769,7 +770,7 @@ export default function ChatPage() {
                   <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
                 </div>
                 <div className="hidden items-center justify-center group-data-[collapsible=icon]:flex">
-                  <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
+                   <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
                 </div>
                 <span className="sr-only">Toggle Sidebar</span>
               </Button>
@@ -936,16 +937,7 @@ export default function ChatPage() {
                {selectedModel === 'llama3' && <Cpu size={24} className="text-primary mr-2" />}
                {selectedModel === 'deepseek-r1' && <Brain size={24} className="text-primary mr-2" />}
               <h1 className="text-xl font-semibold text-foreground">GenAI Config Generator</h1>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="ml-2 animate-robot-bob text-primary">
-                <rect x="4" y="8" width="16" height="10" rx="2" fill="currentColor"/>
-                <rect x="7" y="5" width="10" height="5" rx="1" fill="currentColor"/>
-                <circle cx="8" cy="12" r="1" fill="var(--background)"/>
-                <circle cx="16" cy="12" r="1" fill="var(--background)"/>
-                <line x1="7" y1="18" x2="7" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <line x1="17" y1="18" x2="17" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <line x1="10" y1="5" x2="10" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <line x1="14" y1="5" x2="14" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
+              <Image src="/animated-robot.gif" alt="Animated Robot" width={28} height={28} className="ml-2" unoptimized={true} />
             </div>
             <div className="flex items-center gap-2">
               <Select value={selectedModel} onValueChange={setSelectedModel}>
