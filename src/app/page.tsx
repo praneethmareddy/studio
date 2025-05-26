@@ -584,14 +584,15 @@ export default function ChatPage() {
         return;
     }
 
-    // Truncate messages: Keep all messages up to *but not including* the AI message to be regenerated.
-    // This includes the promptingUserMessage.
-    const messagesUpToAIResponseIndex = currentConversation.messages.slice(0, aiMessageIndex);
+    // Truncate messages: Keep all messages up to (and including) the promptingUserMessage, 
+    // but remove the AI message to be regenerated and all subsequent messages.
+    const messagesUpToPromptingUserMessage = currentConversation.messages.slice(0, aiMessageIndex);
+
 
     setConversations(prevConvs =>
         prevConvs.map(conv =>
             conv.id === activeConversationId
-                ? { ...conv, messages: messagesUpToAIResponseIndex, timestamp: Date.now() }
+                ? { ...conv, messages: messagesUpToPromptingUserMessage, timestamp: Date.now() }
                 : conv
         ).sort((a, b) => b.timestamp - a.timestamp)
     );
@@ -603,6 +604,8 @@ export default function ChatPage() {
     toast({ title: "Regenerating AI response..." });
 
     let queryTextForBackend = promptingUserMessage.text;
+    let originalFileDetailsForBackend = promptingUserMessage.file;
+
     if (promptingUserMessage.file) {
         queryTextForBackend = `[File Attached: ${promptingUserMessage.file.name}] ${promptingUserMessage.text}`.trim();
         if (!promptingUserMessage.text.trim() && promptingUserMessage.file) { 
@@ -624,7 +627,7 @@ export default function ChatPage() {
 
         let aiResponseText: string = await backendResponse.json();
         let processedResponseText = aiResponseText;
-        if (selectedModel === 'deepseek-r1') { // Use selectedModel for processing
+        if (selectedModel === 'deepseek-r1') { 
             processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         }
 
@@ -634,7 +637,7 @@ export default function ChatPage() {
             text: '',
             sender: 'ai',
             timestamp: Date.now(),
-            modelUsed: selectedModel, // Store the model used for this response
+            modelUsed: selectedModel, 
         };
 
         setConversations(prevConvs =>
@@ -666,7 +669,7 @@ export default function ChatPage() {
           text: "Sorry, I couldn't regenerate the response. Please try again.",
           sender: 'ai',
           timestamp: Date.now(),
-          modelUsed: selectedModel, // Store model used even for error
+          modelUsed: selectedModel, 
         };
         setConversations(prevConvs =>
             prevConvs.map(conv => {
@@ -936,7 +939,8 @@ export default function ChatPage() {
                   </Button>
                 </SidebarTrigger>
               </div>
-              <ChatLogo className="h-8 w-8 text-primary mr-3" />
+               {selectedModel === 'llama3' && <Cpu size={24} className="text-primary mr-2" />}
+               {selectedModel === 'deepseek-r1' && <Brain size={24} className="text-primary mr-2" />}
               <h1 className="text-xl font-semibold text-foreground">GenAI Config Generator</h1>
             </div>
             <div className="flex items-center gap-2">
@@ -1032,3 +1036,4 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
+
