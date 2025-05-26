@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Search, Menu, Paperclip, Loader2 } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Search, Menu, Paperclip, Loader2, FileText, RefreshCw, ThumbsUp, ThumbsDown, Copy, Download } from 'lucide-react';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   Select,
@@ -213,7 +213,7 @@ export default function ChatPage() {
   }, [conversations, sidebarSearchTerm]);
 
   const groupedAndSortedConversations = useMemo(() => {
-    const grouped = groupConversations(filteredConversations); // Use filtered conversations
+    const grouped = groupConversations(filteredConversations); 
     const groupOrder = ['Today', 'Yesterday', 'Previous 7 Days', 'Previous 30 Days'];
 
     const orderedGroups: { title: string; conversations: Conversation[] }[] = [];
@@ -227,12 +227,14 @@ export default function ChatPage() {
     const monthlyGroupKeys = Object.keys(grouped)
       .filter(key => !groupOrder.includes(key))
       .sort((a, b) => {
+        // Ensure dates are valid before attempting to parse
         const dateA = new Date(`01 ${a}`);
         const dateB = new Date(`01 ${b}`);
         if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-            return 0;
+            // Handle invalid date strings gracefully, e.g., by not sorting them or placing them at the end
+            return 0; 
         }
-        return dateB.getTime() - dateA.getTime();
+        return dateB.getTime() - dateA.getTime(); // Sort descending (newest first)
       });
 
     monthlyGroupKeys.forEach(key => {
@@ -251,7 +253,7 @@ export default function ChatPage() {
     setChatInputValue('');
     setEditingMessage(null);
     setAttachedFile(null);
-    setSidebarSearchTerm(''); // Clear search on new chat
+    setSidebarSearchTerm(''); 
   };
 
   const handleSelectConversation = (conversationId: string) => {
@@ -277,7 +279,7 @@ export default function ChatPage() {
 
   const streamResponseText = useCallback((fullText: string, messageId: string, conversationId: string) => {
     let currentDisplayedText = '';
-    const parts = fullText.split(/(\s+)/); // Split by space but keep spaces
+    const parts = fullText.split(/(\s+)/); 
     let partIndex = 0;
 
     const appendNextPart = () => {
@@ -314,19 +316,19 @@ export default function ChatPage() {
   const handleSendMessage = useCallback(async (text: string, file?: File) => {
     if (!text.trim() && !file) return;
 
-    let messageTextForQuery = text; // This will be sent to backend
-    let displayMessageText = text; // This will be displayed in UI
+    let messageTextForQuery = text; 
+    let displayMessageText = text; 
 
     let fileInfo;
 
     if (file) {
       fileInfo = { name: file.name, type: file.type, size: file.size };
       messageTextForQuery = `[File Attached: ${file.name}] ${text}`.trim();
-      displayMessageText = text; // Display only user text, file info is separate in UI
+      displayMessageText = text; 
     }
      if (!messageTextForQuery.trim() && file) {
       messageTextForQuery = `File: ${file.name}`;
-      displayMessageText = `File: ${file.name}`; // If only file, show this as text
+      displayMessageText = `File: ${file.name}`; 
     }
 
 
@@ -377,12 +379,11 @@ export default function ChatPage() {
       }
 
       let aiResponseText: string = await backendResponse.json();
-
       let processedResponseText = aiResponseText;
+
       if (selectedModel === 'deepseek-r1') {
         processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
       }
-
 
       const newAiMessageId = (Date.now() + 1).toString();
       const aiMessagePlaceholder: Message = {
@@ -559,18 +560,11 @@ export default function ChatPage() {
       setTimeout(() => {
         let textToSend = userPromptForAIMessage;
         if (userFileForAIMessage) {
-          // The backend expects the file indication in the query text
           textToSend = `[File Attached: ${userFileForAIMessage.name}] ${userPromptForAIMessage}`.trim();
            if (!userPromptForAIMessage.trim() && userFileForAIMessage) {
              textToSend = `File: ${userFileForAIMessage.name}`;
            }
         }
-        // For regeneration, we need to reconstruct the file object if it was attached
-        // However, our current handleSendMessage expects a File object, not just info.
-        // This part might need adjustment if regenerating with files becomes complex.
-        // For now, we'll send the text as constructed above.
-        // To truly re-send with a file, we'd need to store the original File object or re-prompt.
-        // Given current setup, only text (potentially with file indicator) is resent.
         handleSendMessage(textToSend);
         toast({ title: "Regenerating response..." });
       }, 0);
@@ -825,7 +819,7 @@ export default function ChatPage() {
       </Sidebar>
       <SidebarRail />
       <SidebarInset className="flex flex-col !p-0">
-        <div className="flex flex-col h-screen bg-background text-foreground">
+        <div className={cn("flex flex-col h-screen bg-background text-foreground", "animate-shadow-pulse")}>
           <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
             <div className="flex items-center">
               <div className="md:hidden mr-2">
@@ -931,3 +925,4 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
+
