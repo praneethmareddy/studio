@@ -117,7 +117,7 @@ export function ChatInput({
           size="icon"
           disabled={isLoading || (!value.trim() && !attachedFile)}
           className={cn(
-            "absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-primary",
+            "absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-foreground",
             !isLoading && (value.trim() || attachedFile) && "hover:animate-shadow-pulse"
             )}
           variant="ghost"

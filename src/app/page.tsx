@@ -60,7 +60,7 @@ const STREAM_DELAY_MS = 50;
 const sampleQueriesList = [
   "give me telus ciq",
   "give me no of sections in master template",
-  "give elus ne template",
+  "give telus ne template",
   "result of 2+2 = ?",
 ];
 
@@ -195,17 +195,17 @@ export default function ChatPage() {
   // Effect to ensure activeConversationId remains valid if conversations change (e.g., deletion)
   useEffect(() => {
     if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
-      // The active conversation ID is set, but it no longer exists in the conversations list.
-      // Try to set to the most recent existing conversation, or null if none exist.
       const mostRecent = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
       setActiveConversationId(mostRecent ? mostRecent.id : null);
     } else if (conversations.length === 0 && activeConversationId) {
-      // There are no conversations left, but an activeConversationId is still set. Clear it.
       setActiveConversationId(null);
+    } else if (conversations.length > 0 && !activeConversationId && !editingConversation && !editingMessage && !sidebarSearchTerm) {
+      // If no chat is active and we are not in an editing/searching state, auto-select the most recent
+      // This was removed to allow "New Chat" state to persist, but can be re-added if default selection is desired
+      // const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
+      // setActiveConversationId(mostRecent.id);
     }
-    // Note: We DO NOT automatically select a conversation if activeConversationId is null and conversations exist.
-    // This is to allow the "New Chat" state (activeConversationId = null) to persist.
-  }, [conversations, activeConversationId]);
+  }, [conversations, activeConversationId, editingConversation, editingMessage, sidebarSearchTerm]);
 
 
   useEffect(() => {
@@ -426,7 +426,6 @@ export default function ChatPage() {
       if (currentConversationId) { 
          streamResponseText(processedResponseText, newAiMessageId, currentConversationId);
       } else {
-        // This case should ideally not be reached if a new conversation is always created.
         console.error("Error: No active conversation ID to stream response to.");
         setIsLoading(false); 
       }
@@ -591,7 +590,7 @@ export default function ChatPage() {
         const currentConversation = prevConvs[convIndex];
         const aiMessageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
 
-        if (aiMessageIndex <= 0) {
+        if (aiMessageIndex <= 0) { // AI message must have a preceding user message
             toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
             return prevConvs;
         }
@@ -615,13 +614,14 @@ export default function ChatPage() {
         return updatedConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
     
+    // Ensure state update has propagated
+    await new Promise(resolve => setTimeout(resolve, 0)); 
+    
     if (!promptingUserMessage) {
         console.error("Regeneration failed: prompting user message not captured.");
         setIsLoading(false);
         return;
     }
-
-    await new Promise(resolve => setTimeout(resolve, 0)); 
 
     setIsLoading(true);
     toast({ title: "Regenerating AI response..." });
