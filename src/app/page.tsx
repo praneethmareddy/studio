@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Menu } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Menu, Paperclip } from 'lucide-react';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   Select,
@@ -54,16 +54,14 @@ import {
 import { cn } from '@/lib/utils';
 import { isToday, isYesterday, differenceInDays, format } from 'date-fns';
 
-const CONVERSATIONS_STORAGE_KEY = 'deepReactConversations';
-const STREAM_DELAY_MS = 50; // Delay between each "word" in simulated streaming
+const CONVERSATIONS_STORAGE_KEY = 'genAiConfigGeneratorConversations'; // Updated key
+const STREAM_DELAY_MS = 50; 
 
 const sampleQueriesList = [
-  "What's the weather like today?",
-  "Explain quantum computing in simple terms.",
-  "Suggest a good recipe for pasta.",
-  "Tell me a fun fact about space.",
-  "What are the latest advancements in AI?",
-  "How does blockchain technology work?",
+  "give me telus ciq",
+  "give me no of sections in master template",
+  "give elus ne template",
+  "result of 2+2 = ?",
 ];
 
 type AlertDialogState = {
@@ -124,6 +122,8 @@ export default function ChatPage() {
   
   const [chatInputValue, setChatInputValue] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>('llama3'); 
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+
 
   const [alertDialogState, setAlertDialogState] = useState<AlertDialogState>({
     isOpen: false,
@@ -240,22 +240,33 @@ export default function ChatPage() {
     setActiveConversationId(null); 
     setChatInputValue('');
     setEditingMessage(null); 
+    setAttachedFile(null);
   };
 
   const handleSelectConversation = (conversationId: string) => {
     setEditingConversation(null); 
     setActiveConversationId(conversationId);
     setChatInputValue('');
-    setEditingMessage(null); 
+    setEditingMessage(null);
+    setAttachedFile(null);
   };
 
   const handleSampleQueryClick = (query: string) => {
     setChatInputValue(query);
+    setAttachedFile(null);
+  };
+
+  const handleFileAttach = (file: File) => {
+    setAttachedFile(file);
+  };
+
+  const handleFileRemove = () => {
+    setAttachedFile(null);
   };
 
   const streamResponseText = useCallback((fullText: string, messageId: string, conversationId: string) => {
     let currentDisplayedText = '';
-    const parts = fullText.split(/(\s+)/); // Split by spaces, keeping spaces
+    const parts = fullText.split(/(\s+)/); 
     let partIndex = 0;
 
     const appendNextPart = () => {
@@ -289,14 +300,29 @@ export default function ChatPage() {
     appendNextPart();
   }, []);
 
-  const handleSendMessage = useCallback(async (text: string) => {
-    if (!text.trim()) return;
+  const handleSendMessage = useCallback(async (text: string, file?: File) => {
+    if (!text.trim() && !file) return;
+
+    let messageText = text;
+    let fileInfo;
+
+    if (file) {
+      fileInfo = { name: file.name, type: file.type, size: file.size };
+      // For now, just prepend file name to query for backend awareness.
+      // Actual file sending would require FormData or base64, and backend changes.
+      messageText = `[File Attached: ${file.name}] ${text}`.trim();
+    }
+     if (!messageText.trim() && file) { // If only file is attached, use a placeholder text
+      messageText = `File: ${file.name}`;
+    }
+
 
     const newUserMessage: Message = {
       id: Date.now().toString(),
-      text,
+      text: text, // Original text for display
       sender: 'user',
       timestamp: Date.now(),
+      file: fileInfo, // Store file info for UI display
     };
 
     setIsLoading(true);
@@ -306,7 +332,7 @@ export default function ChatPage() {
     if (!currentConversationId) {
       const newConversation: Conversation = {
         id: Date.now().toString(),
-        title: text.substring(0, 20) + (text.length > 20 ? '...' : ''),
+        title: (text || file?.name || "New Chat").substring(0, 20) + ((text || file?.name || "New Chat").length > 20 ? '...' : ''),
         timestamp: Date.now(),
         messages: [newUserMessage],
       };
@@ -323,12 +349,14 @@ export default function ChatPage() {
     updatedConversations.sort((a, b) => b.timestamp - a.timestamp);
     setConversations(updatedConversations); 
     setChatInputValue('');
+    setAttachedFile(null); // Clear attached file after sending
 
     try {
+      // Using messageText (which includes file indication) for the backend query
       const backendResponse = await fetch('http://localhost:9000/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: text, model: selectedModel }),
+        body: JSON.stringify({ query: messageText, model: selectedModel }),
       });
 
       if (!backendResponse.ok) {
@@ -391,10 +419,11 @@ export default function ChatPage() {
   const handleStartEditMessage = (message: Message) => {
     setEditingMessage(message);
     setEditingMessageText(message.text);
+    setAttachedFile(null); // Cannot edit files for now, clear if any
   };
 
   const handleSaveEditedMessage = async () => {
-    if (!editingMessage || !activeConversationId || !editingMessageText.trim()) return;
+    if (!editingMessage || !activeConversationId || (!editingMessageText.trim() && !editingMessage.file)) return;
   
     setConversations(prev => {
       return prev.map(conv => {
@@ -415,6 +444,8 @@ export default function ChatPage() {
   
     await new Promise(resolve => setTimeout(resolve, 0)); 
     
+    // For edited messages, we resend the text. File re-attachment during edit is not supported in this flow.
+    // If the original message had a file, its info is not passed here for resending.
     await handleSendMessage(editingMessageText.trim()); 
   
     setEditingMessage(null);
@@ -495,13 +526,17 @@ export default function ChatPage() {
   const handleRegenerateAIMessage = (messageId: string) => {
     if (!activeConversationId) return;
     let userPromptForAIMessage = "";
+    let userFileForAIMessage: Message['file'] = undefined;
   
     setConversations(prev => {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const aiMessageIndex = conv.messages.findIndex(msg => msg.id === messageId && msg.sender === 'ai');
           if (aiMessageIndex > 0 && conv.messages[aiMessageIndex - 1].sender === 'user') { 
-            userPromptForAIMessage = conv.messages[aiMessageIndex - 1].text;
+            const userMessage = conv.messages[aiMessageIndex - 1];
+            userPromptForAIMessage = userMessage.text;
+            userFileForAIMessage = userMessage.file; // Capture file info if present
+
             const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex -1); 
             return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
           }
@@ -510,9 +545,15 @@ export default function ChatPage() {
       }).sort((a,b) => b.timestamp - a.timestamp);
     });
   
-    if (userPromptForAIMessage) {
+    if (userPromptForAIMessage || userFileForAIMessage) { // Check if either text or file exists
       setTimeout(() => {
-        handleSendMessage(userPromptForAIMessage);
+        // For regeneration, we can't directly resend the File object.
+        // We'll send the text and a placeholder indicating the file was originally present.
+        let textToSend = userPromptForAIMessage;
+        if (userFileForAIMessage) {
+          textToSend = `[File Attached: ${userFileForAIMessage.name}] ${userPromptForAIMessage}`.trim();
+        }
+        handleSendMessage(textToSend); // Send combined text; file object itself is not resent
         toast({ title: "Regenerating response..." });
       }, 0);
     } else {
@@ -607,7 +648,7 @@ export default function ChatPage() {
               >
                 <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
                   <span className="text-sm font-medium text-muted-foreground whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:opacity-0">
-                    DeepReact Chat
+                    GenAI Config Generator
                   </span>
                   <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
                 </div>
@@ -749,7 +790,7 @@ export default function ChatPage() {
                 </SidebarTrigger>
               </div>
               <ChatLogo className="h-8 w-8 text-primary mr-3" />
-              <h1 className="text-xl font-semibold text-foreground">DeepReact Chat</h1>
+              <h1 className="text-xl font-semibold text-foreground">GenAI Config Generator</h1>
             </div>
             <div className="flex items-center gap-2">
               <Select value={selectedModel} onValueChange={setSelectedModel}>
@@ -788,7 +829,7 @@ export default function ChatPage() {
                     <Button onClick={handleSaveEditedMessage} size="sm">Save & Resend</Button>
                   </div>
                 </div>
-              ) : displaySampleQueries && !isLoading ? (
+              ) : displaySampleQueries && !isLoading && !attachedFile ? (
                 <SampleQueries 
                   queries={sampleQueriesList} 
                   onQueryClick={handleSampleQueryClick} 
@@ -814,7 +855,10 @@ export default function ChatPage() {
               value={chatInputValue}
               onValueChange={setChatInputValue}
               onSendMessage={handleSendMessage} 
-              isLoading={isLoading} 
+              isLoading={isLoading}
+              attachedFile={attachedFile}
+              onFileAttach={handleFileAttach}
+              onFileRemove={handleFileRemove}
             />
           )}
         </div>
@@ -841,4 +885,3 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
-

@@ -5,7 +5,7 @@ import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { User, Bot, Pencil, Trash2, Download, Copy, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { User, Bot, Pencil, Trash2, Download, Copy, RefreshCw, ThumbsUp, ThumbsDown, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import ReactMarkdown from 'react-markdown';
@@ -121,9 +121,20 @@ export function ChatMessage({
                : 'bg-card text-card-foreground rounded-xl rounded-bl-sm'
           )}
         >
-          <div className={cn("p-3 text-sm", isUser ? "text-primary-foreground whitespace-pre-wrap" : "text-card-foreground" )}>
+          {message.file && (
+            <div className="px-3 pt-2 pb-1 border-b border-primary/20 dark:border-card-foreground/20">
+              <div className="flex items-center gap-2 text-xs">
+                <FileText size={16} className={cn(isUser ? "text-primary-foreground/80" : "text-muted-foreground")} />
+                <span className={cn("truncate", isUser ? "text-primary-foreground" : "text-card-foreground")}>{message.file.name}</span>
+                <span className={cn(isUser ? "text-primary-foreground/70" : "text-muted-foreground/80")}>
+                  ({(message.file.size / 1024).toFixed(1)} KB)
+                </span>
+              </div>
+            </div>
+          )}
+          <div className={cn("p-3 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
             {isUser ? (
-              message.text
+              message.text // User message text is pre-wrapped by browser usually
             ) : (
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {message.text}
@@ -147,8 +158,8 @@ export function ChatMessage({
         <div className="flex flex-col sm:flex-row items-center gap-0.5 opacity-0 group-hover/message:opacity-100 focus-within:opacity-100 transition-opacity duration-200 mb-1">
           {isUser && (
             <>
+              <ActionButton onClick={() => onCopyUserMessage(message.text)} icon={Copy} tooltipText="Copy Text" />
               <ActionButton onClick={onEdit} icon={Pencil} tooltipText="Edit & Resend" />
-              <ActionButton onClick={() => onCopyUserMessage(message.text)} icon={Copy} tooltipText="Copy" />
               <ActionButton onClick={onDelete} icon={Trash2} tooltipText="Delete" className="hover:text-destructive text-destructive/80" />
             </>
           )}
@@ -174,4 +185,3 @@ export function ChatMessage({
     </div>
   );
 }
-
