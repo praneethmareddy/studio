@@ -122,6 +122,9 @@
   .animate-float {
     animation: float 3s ease-in-out infinite;
   }
+  .animate-shadow-pulse {
+    animation: shadow-pulse 2s infinite;
+  }
 }
 
 @keyframes float {
@@ -133,5 +136,17 @@
   }
   100% {
     transform: translateY(0px);
+  }
+}
+
+@keyframes shadow-pulse {
+  0% {
+    box-shadow: 0 0 0 0px hsl(var(--primary) / 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px hsl(var(--primary) / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0px hsl(var(--primary) / 0);
   }
 }

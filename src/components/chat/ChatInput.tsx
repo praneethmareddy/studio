@@ -18,14 +18,14 @@ interface ChatInputProps {
   onFileRemove: () => void;
 }
 
-export function ChatInput({ 
-  value, 
-  onValueChange, 
-  onSendMessage, 
+export function ChatInput({
+  value,
+  onValueChange,
+  onSendMessage,
   isLoading,
   attachedFile,
   onFileAttach,
-  onFileRemove 
+  onFileRemove
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -116,7 +116,10 @@ export function ChatInput({
           type="submit"
           size="icon"
           disabled={isLoading || (!value.trim() && !attachedFile)}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+          className={cn(
+            "absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-primary",
+            !isLoading && (value.trim() || attachedFile) && "hover:animate-shadow-pulse"
+            )}
           variant="ghost"
           aria-label="Send message"
         >

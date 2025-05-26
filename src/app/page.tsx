@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Search, Menu, Paperclip } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Search, Menu, Paperclip, Loader2 } from 'lucide-react';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   Select,
@@ -55,7 +55,7 @@ import { cn } from '@/lib/utils';
 import { isToday, isYesterday, differenceInDays, format } from 'date-fns';
 
 const CONVERSATIONS_STORAGE_KEY = 'genAiConfigGeneratorConversations';
-const STREAM_DELAY_MS = 50; 
+const STREAM_DELAY_MS = 50;
 
 const sampleQueriesList = [
   "give me telus ciq",
@@ -96,13 +96,13 @@ const groupConversations = (conversations: Conversation[]): GroupedConversations
     } else if (differenceInDays(now, convDate) < 30) {
       groupKey = 'Previous 30 Days';
     } else {
-      groupKey = format(convDate, 'MMMM yyyy'); 
+      groupKey = format(convDate, 'MMMM yyyy');
     }
-    
+
     if (!finalGroups[groupKey]) {
       finalGroups[groupKey] = [];
     }
-    finalGroups[groupKey].push(conv); 
+    finalGroups[groupKey].push(conv);
   });
   return finalGroups;
 };
@@ -119,10 +119,11 @@ export default function ChatPage() {
 
   const [editingConversation, setEditingConversation] = useState<Conversation | null>(null);
   const [editingConversationTitleText, setEditingConversationTitleText] = useState<string>('');
-  
+
   const [chatInputValue, setChatInputValue] = useState('');
-  const [selectedModel, setSelectedModel] = useState<string>('llama3'); 
+  const [selectedModel, setSelectedModel] = useState<string>('llama3');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [sidebarSearchTerm, setSidebarSearchTerm] = useState('');
 
 
   const [alertDialogState, setAlertDialogState] = useState<AlertDialogState>({
@@ -131,7 +132,7 @@ export default function ChatPage() {
     description: '',
     onConfirm: () => {},
   });
-  
+
   const streamTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 
@@ -141,8 +142,8 @@ export default function ChatPage() {
       if (storedConversations) {
         const loadedConversations: Conversation[] = JSON.parse(storedConversations);
         if (loadedConversations.length > 0) {
-          setConversations(loadedConversations); 
-          const currentActiveId = activeConversationId; 
+          setConversations(loadedConversations);
+          const currentActiveId = activeConversationId;
           if (!currentActiveId && loadedConversations.length > 0) {
             const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
              setActiveConversationId(mostRecent.id);
@@ -161,14 +162,14 @@ export default function ChatPage() {
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, []);
 
  useEffect(() => {
     if (conversations.length > 0 && activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
         const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
         setActiveConversationId(mostRecent ? mostRecent.id : null);
     } else if (conversations.length === 0 && activeConversationId) {
-        setActiveConversationId(null); 
+        setActiveConversationId(null);
     }
   }, [conversations, activeConversationId]);
 
@@ -189,7 +190,7 @@ export default function ChatPage() {
         localStorage.removeItem(CONVERSATIONS_STORAGE_KEY);
     }
   }, [conversations, toast]);
-  
+
   useEffect(() => {
     return () => {
       if (streamTimeoutRef.current) {
@@ -202,10 +203,19 @@ export default function ChatPage() {
     return conversations.find(conv => conv.id === activeConversationId);
   }, [conversations, activeConversationId]);
 
+  const filteredConversations = useMemo(() => {
+    if (!sidebarSearchTerm) {
+      return conversations;
+    }
+    return conversations.filter(conv =>
+      conv.title.toLowerCase().includes(sidebarSearchTerm.toLowerCase())
+    );
+  }, [conversations, sidebarSearchTerm]);
+
   const groupedAndSortedConversations = useMemo(() => {
-    const grouped = groupConversations(conversations);
+    const grouped = groupConversations(filteredConversations); // Use filtered conversations
     const groupOrder = ['Today', 'Yesterday', 'Previous 7 Days', 'Previous 30 Days'];
-    
+
     const orderedGroups: { title: string; conversations: Conversation[] }[] = [];
 
     groupOrder.forEach(key => {
@@ -217,10 +227,10 @@ export default function ChatPage() {
     const monthlyGroupKeys = Object.keys(grouped)
       .filter(key => !groupOrder.includes(key))
       .sort((a, b) => {
-        const dateA = new Date(`01 ${a}`); 
+        const dateA = new Date(`01 ${a}`);
         const dateB = new Date(`01 ${b}`);
         if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-            return 0; 
+            return 0;
         }
         return dateB.getTime() - dateA.getTime();
       });
@@ -230,21 +240,22 @@ export default function ChatPage() {
         orderedGroups.push({ title: key, conversations: grouped[key] });
       }
     });
-    
+
     return orderedGroups;
-  }, [conversations]);
+  }, [filteredConversations]);
 
 
   const handleNewChat = () => {
-    setEditingConversation(null); 
-    setActiveConversationId(null); 
+    setEditingConversation(null);
+    setActiveConversationId(null);
     setChatInputValue('');
-    setEditingMessage(null); 
+    setEditingMessage(null);
     setAttachedFile(null);
+    setSidebarSearchTerm(''); // Clear search on new chat
   };
 
   const handleSelectConversation = (conversationId: string) => {
-    setEditingConversation(null); 
+    setEditingConversation(null);
     setActiveConversationId(conversationId);
     setChatInputValue('');
     setEditingMessage(null);
@@ -280,7 +291,7 @@ export default function ChatPage() {
                 messages: conv.messages.map(msg =>
                   msg.id === messageId ? { ...msg, text: currentDisplayedText } : msg
                 ),
-                timestamp: Date.now(), 
+                timestamp: Date.now(),
               };
             }
             return conv;
@@ -289,9 +300,9 @@ export default function ChatPage() {
         partIndex++;
         streamTimeoutRef.current = setTimeout(appendNextPart, STREAM_DELAY_MS);
       } else {
-        setIsLoading(false); 
-        setConversations(prevConvs => 
-            prevConvs.map(conv => 
+        setIsLoading(false);
+        setConversations(prevConvs =>
+            prevConvs.map(conv =>
                 conv.id === conversationId ? {...conv, timestamp: Date.now()} : conv
             ).sort((a,b) => b.timestamp - a.timestamp)
         );
@@ -303,24 +314,28 @@ export default function ChatPage() {
   const handleSendMessage = useCallback(async (text: string, file?: File) => {
     if (!text.trim() && !file) return;
 
-    let messageText = text;
+    let messageTextForQuery = text; // This will be sent to backend
+    let displayMessageText = text; // This will be displayed in UI
+
     let fileInfo;
 
     if (file) {
       fileInfo = { name: file.name, type: file.type, size: file.size };
-      messageText = `[File Attached: ${file.name}] ${text}`.trim();
+      messageTextForQuery = `[File Attached: ${file.name}] ${text}`.trim();
+      displayMessageText = text; // Display only user text, file info is separate in UI
     }
-     if (!messageText.trim() && file) { 
-      messageText = `File: ${file.name}`;
+     if (!messageTextForQuery.trim() && file) {
+      messageTextForQuery = `File: ${file.name}`;
+      displayMessageText = `File: ${file.name}`; // If only file, show this as text
     }
 
 
     const newUserMessage: Message = {
       id: Date.now().toString(),
-      text: text, 
+      text: displayMessageText,
       sender: 'user',
       timestamp: Date.now(),
-      file: fileInfo, 
+      file: fileInfo,
     };
 
     setIsLoading(true);
@@ -345,7 +360,7 @@ export default function ChatPage() {
       );
     }
     updatedConversations.sort((a, b) => b.timestamp - a.timestamp);
-    setConversations(updatedConversations); 
+    setConversations(updatedConversations);
     setChatInputValue('');
     setAttachedFile(null);
 
@@ -353,7 +368,7 @@ export default function ChatPage() {
       const backendResponse = await fetch('http://localhost:9000/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: messageText, model: selectedModel }),
+        body: JSON.stringify({ query: messageTextForQuery, model: selectedModel }),
       });
 
       if (!backendResponse.ok) {
@@ -361,8 +376,8 @@ export default function ChatPage() {
         throw new Error(`HTTP error! status: ${backendResponse.status}, message: ${errorData}`);
       }
 
-      const aiResponseText: string = await backendResponse.json(); 
-      
+      let aiResponseText: string = await backendResponse.json();
+
       let processedResponseText = aiResponseText;
       if (selectedModel === 'deepseek-r1') {
         processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
@@ -372,7 +387,7 @@ export default function ChatPage() {
       const newAiMessageId = (Date.now() + 1).toString();
       const aiMessagePlaceholder: Message = {
         id: newAiMessageId,
-        text: '', 
+        text: '',
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
@@ -385,7 +400,7 @@ export default function ChatPage() {
             : conv
         ).sort((a,b) => b.timestamp - a.timestamp)
       );
-      
+
       streamResponseText(processedResponseText, newAiMessageId, currentConversationId);
 
     } catch (error: any) {
@@ -410,39 +425,39 @@ export default function ChatPage() {
         ).sort((a, b) => b.timestamp - a.timestamp)
       );
       setIsLoading(false);
-    } 
+    }
   }, [activeConversationId, conversations, toast, selectedModel, streamResponseText]);
 
   const handleStartEditMessage = (message: Message) => {
     setEditingMessage(message);
     setEditingMessageText(message.text);
-    setAttachedFile(null); 
+    setAttachedFile(null);
   };
 
   const handleSaveEditedMessage = async () => {
     if (!editingMessage || !activeConversationId || (!editingMessageText.trim() && !editingMessage.file)) return;
-  
+
     setConversations(prev => {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
           if (messageIndex === -1) return conv;
-  
-          const messagesUpToEdit = conv.messages.slice(0, messageIndex); 
+
+          const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
             messages: messagesUpToEdit,
-            timestamp: Date.now(), 
+            timestamp: Date.now(),
           };
         }
         return conv;
       }).sort((a,b) => b.timestamp - a.timestamp);
     });
-  
-    await new Promise(resolve => setTimeout(resolve, 0)); 
-    
-    await handleSendMessage(editingMessageText.trim()); 
-  
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    await handleSendMessage(editingMessageText.trim());
+
     setEditingMessage(null);
     setEditingMessageText('');
     toast({ title: "Message edited and resent" });
@@ -468,12 +483,12 @@ export default function ChatPage() {
               return {
                 ...conv,
                 messages: updatedMessages,
-                timestamp: updatedMessages.length > 0 ? Date.now() : conv.timestamp 
+                timestamp: updatedMessages.length > 0 ? Date.now() : conv.timestamp
               };
             }
           }
           return conv;
-        }).filter(conv => conv.messages.length > 0 || conv.id !== activeConversationId) 
+        }).filter(conv => conv.messages.length > 0 || conv.id !== activeConversationId)
          .sort((a,b) => b.timestamp - a.timestamp)
         );
         toast({ title: "Message and subsequent messages deleted" });
@@ -522,42 +537,52 @@ export default function ChatPage() {
     if (!activeConversationId) return;
     let userPromptForAIMessage = "";
     let userFileForAIMessage: Message['file'] = undefined;
-  
+
     setConversations(prev => {
       return prev.map(conv => {
         if (conv.id === activeConversationId) {
           const aiMessageIndex = conv.messages.findIndex(msg => msg.id === messageId && msg.sender === 'ai');
-          if (aiMessageIndex > 0 && conv.messages[aiMessageIndex - 1].sender === 'user') { 
+          if (aiMessageIndex > 0 && conv.messages[aiMessageIndex - 1].sender === 'user') {
             const userMessage = conv.messages[aiMessageIndex - 1];
             userPromptForAIMessage = userMessage.text;
-            userFileForAIMessage = userMessage.file; 
+            userFileForAIMessage = userMessage.file;
 
-            const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex -1); 
+            const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex -1);
             return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
           }
         }
         return conv;
       }).sort((a,b) => b.timestamp - a.timestamp);
     });
-  
-    if (userPromptForAIMessage || userFileForAIMessage) { 
+
+    if (userPromptForAIMessage || userFileForAIMessage) {
       setTimeout(() => {
         let textToSend = userPromptForAIMessage;
         if (userFileForAIMessage) {
+          // The backend expects the file indication in the query text
           textToSend = `[File Attached: ${userFileForAIMessage.name}] ${userPromptForAIMessage}`.trim();
+           if (!userPromptForAIMessage.trim() && userFileForAIMessage) {
+             textToSend = `File: ${userFileForAIMessage.name}`;
+           }
         }
-        handleSendMessage(textToSend); 
+        // For regeneration, we need to reconstruct the file object if it was attached
+        // However, our current handleSendMessage expects a File object, not just info.
+        // This part might need adjustment if regenerating with files becomes complex.
+        // For now, we'll send the text as constructed above.
+        // To truly re-send with a file, we'd need to store the original File object or re-prompt.
+        // Given current setup, only text (potentially with file indicator) is resent.
+        handleSendMessage(textToSend);
         toast({ title: "Regenerating response..." });
       }, 0);
     } else {
       toast({ title: "Error", description: "Could not find user prompt to regenerate.", variant: "destructive" });
     }
   };
-  
+
   const handleLikeAIMessage = (messageId: string) => {
     toast({ title: "Message Liked!", description: `AI Message ID: ${messageId}` });
   };
-  
+
   const handleDislikeAIMessage = (messageId: string) => {
     toast({ title: "Message Disliked.", description: `AI Message ID: ${messageId}` });
   };
@@ -569,12 +594,12 @@ export default function ChatPage() {
        setActiveConversationId(conversation.id);
     }
   };
-  
+
   const handleSaveEditedConversationTitle = () => {
     if (!editingConversation) return;
-    setConversations(prev => prev.map(conv => 
-      conv.id === editingConversation.id 
-        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } 
+    setConversations(prev => prev.map(conv =>
+      conv.id === editingConversation.id
+        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() }
         : conv
     ).sort((a,b) => b.timestamp - a.timestamp));
     setEditingConversation(null);
@@ -595,7 +620,7 @@ export default function ChatPage() {
       onConfirm: () => {
         const newConversations = conversations.filter(conv => conv.id !== conversationId);
         setConversations(newConversations);
-        
+
         if (activeConversationId === conversationId) {
           if (newConversations.length > 0) {
             const sortedRemaining = [...newConversations].sort((a,b) => b.timestamp - a.timestamp);
@@ -617,7 +642,7 @@ export default function ChatPage() {
       title: "Delete All Chats?",
       description: "Are you sure you want to delete all your conversations? This action cannot be undone and will clear all chat history.",
       onConfirm: () => {
-        setConversations([]); 
+        setConversations([]);
         setActiveConversationId(null);
         toast({ title: "All conversations deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
@@ -656,7 +681,7 @@ export default function ChatPage() {
             <Button
               variant="default"
               onClick={handleNewChat}
-              className="w-full flex items-center justify-start text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-start"
+              className="w-full flex items-center justify-start text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-start hover:animate-shadow-pulse"
               title="New Chat"
             >
               <SquarePen size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
@@ -673,13 +698,31 @@ export default function ChatPage() {
                 type="search"
                 placeholder="Search chats..."
                 className="w-full h-9 pl-10 pr-3 text-sm bg-input border-input focus:ring-ring"
+                value={sidebarSearchTerm}
+                onChange={(e) => setSidebarSearchTerm(e.target.value)}
               />
+               {sidebarSearchTerm && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSidebarSearchTerm('')}
+                >
+                  <X size={14} />
+                  <span className="sr-only">Clear search</span>
+                </Button>
+              )}
             </div>
           </div>
         </SidebarHeader>
         <SidebarContent className="p-0">
           <ScrollArea className="h-full">
-            {conversations.length === 0 && (
+            {filteredConversations.length === 0 && sidebarSearchTerm && (
+              <div className="p-4 text-center text-muted-foreground group-data-[collapsible=icon]:hidden">
+                No chats match your search.
+              </div>
+            )}
+            {filteredConversations.length === 0 && !sidebarSearchTerm && (
               <div className="p-4 text-center text-muted-foreground group-data-[collapsible=icon]:hidden">
                 No chats yet. Start a new one!
               </div>
@@ -693,15 +736,15 @@ export default function ChatPage() {
                      </div>
                   )}
                   {group.conversations.map(conv => (
-                    <SidebarMenuItem 
-                      key={conv.id} 
+                    <SidebarMenuItem
+                      key={conv.id}
                       isActive={conv.id === activeConversationId}
                       className="group/conv-item flex items-center justify-between flex-nowrap rounded-md"
                     >
                       {editingConversation?.id === conv.id ? (
                         <div className="flex items-center gap-2 px-2 py-1 w-full">
-                          <Input 
-                            type="text" 
+                          <Input
+                            type="text"
                             value={editingConversationTitleText}
                             onChange={(e) => setEditingConversationTitleText(e.target.value)}
                             onKeyDown={(e) => {
@@ -726,13 +769,13 @@ export default function ChatPage() {
                               <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
                             </div>
                           </SidebarMenuButton>
-                          
+
                           <div className="flex-shrink-0 group-data-[collapsible=icon]:hidden">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
                                   className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[[data-active=true]]/conv-item:hover:text-inherit/80"
                                   onClick={(e) => e.stopPropagation()}
                                 >
@@ -780,12 +823,12 @@ export default function ChatPage() {
           </SidebarMenuButton>
         </SidebarFooter>
       </Sidebar>
-      <SidebarRail /> 
+      <SidebarRail />
       <SidebarInset className="flex flex-col !p-0">
         <div className="flex flex-col h-screen bg-background text-foreground">
           <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
             <div className="flex items-center">
-              <div className="md:hidden mr-2"> 
+              <div className="md:hidden mr-2">
                 <SidebarTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Open sidebar">
                     <PanelLeft className="h-5 w-5" />
@@ -833,9 +876,9 @@ export default function ChatPage() {
                   </div>
                 </div>
               ) : displaySampleQueries && !isLoading && !attachedFile ? (
-                <SampleQueries 
-                  queries={sampleQueriesList} 
-                  onQueryClick={handleSampleQueryClick} 
+                <SampleQueries
+                  queries={sampleQueriesList}
+                  onQueryClick={handleSampleQueryClick}
                 />
               ) : (
                  <ChatHistory
@@ -854,10 +897,10 @@ export default function ChatPage() {
               )}
           </main>
           {!editingMessage && (
-            <ChatInput 
+            <ChatInput
               value={chatInputValue}
               onValueChange={setChatInputValue}
-              onSendMessage={handleSendMessage} 
+              onSendMessage={handleSendMessage}
               isLoading={isLoading}
               attachedFile={attachedFile}
               onFileAttach={handleFileAttach}
@@ -888,4 +931,3 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
-
