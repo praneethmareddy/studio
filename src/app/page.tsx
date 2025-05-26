@@ -143,10 +143,9 @@ export default function ChatPage() {
         const loadedConversations: Conversation[] = JSON.parse(storedConversations);
         if (loadedConversations.length > 0) {
           setConversations(loadedConversations);
-          // Preserve activeConversationId if it's valid, otherwise pick the most recent
-          const currentActiveId = activeConversationId; 
-          if (currentActiveId && loadedConversations.find(c => c.id === currentActiveId)) {
-            // Active ID is valid, do nothing
+          const currentActiveIdFromStorage = localStorage.getItem('activeConversationId');
+          if (currentActiveIdFromStorage && loadedConversations.find(c => c.id === currentActiveIdFromStorage)) {
+            setActiveConversationId(currentActiveIdFromStorage);
           } else if (loadedConversations.length > 0) {
             const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
             setActiveConversationId(mostRecent.id);
@@ -165,22 +164,15 @@ export default function ChatPage() {
   }, []); 
 
  useEffect(() => {
-    if (conversations.length > 0) {
-        if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
-            const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
-            if (mostRecent) setActiveConversationId(mostRecent.id);
-            else setActiveConversationId(null); // No conversations left
-        } else if (!activeConversationId) {
-            const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
-            if (mostRecent) setActiveConversationId(mostRecent.id);
-        }
-    } else if (conversations.length === 0 && activeConversationId) {
-        setActiveConversationId(null);
+    if (activeConversationId) {
+        localStorage.setItem('activeConversationId', activeConversationId);
+    } else {
+        localStorage.removeItem('activeConversationId');
     }
-  }, [conversations, activeConversationId]);
+  }, [activeConversationId]);
 
 
-  useEffect(() => {
+ useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
         try {
             localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations));
@@ -196,6 +188,25 @@ export default function ChatPage() {
         localStorage.removeItem(CONVERSATIONS_STORAGE_KEY);
     }
   }, [conversations, toast]);
+
+  useEffect(() => {
+    // This effect ensures activeConversationId remains valid
+    if (conversations.length > 0) {
+        if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
+            // Active conversation was deleted, select the most recent
+            const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
+            setActiveConversationId(mostRecent ? mostRecent.id : null);
+        } else if (!activeConversationId) {
+            // No active conversation, select the most recent
+            const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
+            setActiveConversationId(mostRecent ? mostRecent.id : null);
+        }
+    } else if (conversations.length === 0 && activeConversationId) {
+        // No conversations left, clear active ID
+        setActiveConversationId(null);
+    }
+  }, [conversations, activeConversationId]);
+
 
   useEffect(() => {
     return () => {
@@ -511,6 +522,10 @@ export default function ChatPage() {
           return conv;
         }).filter(conv => { 
             if (conv.id === activeConversationId && conv.messages.length === 0) {
+                 // If deleting the last message makes the conversation empty,
+                 // we might want to handle its deletion or keep it as an empty chat
+                 // For now, we keep it, but it won't show messages.
+                 // setActiveConversationId(null); // Optionally, make no conversation active
             }
             return true; 
          })
@@ -561,34 +576,48 @@ export default function ChatPage() {
  const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     if (!activeConversationId) return;
 
-    const conversationIndex = conversations.findIndex(c => c.id === activeConversationId);
-    if (conversationIndex === -1) return;
+    let promptingUserMessage: Message | undefined;
+    let baseMessagesForRegen: Message[] = [];
 
-    const currentConversation = conversations[conversationIndex];
-    const aiMessageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
+    // Prepare data and update conversation state to truncate
+    setConversations(prevConvs => {
+        const convIndex = prevConvs.findIndex(c => c.id === activeConversationId);
+        if (convIndex === -1) return prevConvs; // Should not happen
+
+        const currentConversation = prevConvs[convIndex];
+        const aiMessageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
+
+        if (aiMessageIndex <= 0) {
+            toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
+            return prevConvs;
+        }
+
+        const userMsg = currentConversation.messages[aiMessageIndex - 1];
+        if (userMsg.sender !== 'user') {
+            toast({ title: "Error", description: "Cannot regenerate. Preceding message is not from user.", variant: "destructive" });
+            return prevConvs;
+        }
+        
+        promptingUserMessage = userMsg; // Capture for use outside this updater
+        baseMessagesForRegen = currentConversation.messages.slice(0, aiMessageIndex); // Includes user prompt, excludes AI msg and after
+
+        const updatedConvs = [...prevConvs];
+        updatedConvs[convIndex] = {
+            ...currentConversation,
+            messages: baseMessagesForRegen, // Truncated messages
+            timestamp: Date.now(),
+        };
+        return updatedConvs.sort((a, b) => b.timestamp - a.timestamp);
+    });
     
-    if (aiMessageIndex <= 0) { 
-        toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
+    // Ensure promptingUserMessage was set (it should be if we reached here)
+    if (!promptingUserMessage) {
+        console.error("Regeneration failed: prompting user message not found after state update attempt.");
+        setIsLoading(false);
         return;
     }
 
-    const promptingUserMessage = currentConversation.messages[aiMessageIndex - 1];
-    if (promptingUserMessage.sender !== 'user') {
-        toast({ title: "Error", description: "Cannot regenerate. Preceding message is not from user.", variant: "destructive" });
-        return;
-    }
-    
-    const messagesUpToAndIncludingUserPrompt = currentConversation.messages.slice(0, aiMessageIndex);
-
-
-    setConversations(prevConvs =>
-        prevConvs.map(conv =>
-            conv.id === activeConversationId
-                ? { ...conv, messages: messagesUpToAndIncludingUserPrompt, timestamp: Date.now() }
-                : conv
-        ).sort((a, b) => b.timestamp - a.timestamp)
-    );
-    
+    // Give React a tick to process the above state update before fetching
     await new Promise(resolve => setTimeout(resolve, 0)); 
 
     setIsLoading(true);
@@ -620,30 +649,36 @@ export default function ChatPage() {
             processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         }
 
-        const newAiMessageId = (Date.now() + 1).toString();
+        const newAiMessageId = (Date.now() + 1).toString(); // Unique ID
         const aiMessagePlaceholder: Message = {
             id: newAiMessageId,
-            text: '',
+            text: '', // Will be filled by streaming
             sender: 'ai',
             timestamp: Date.now(),
             modelUsed: selectedModel, 
         };
-
+        
+        // Add the placeholder to the correct conversation, using the `baseMessagesForRegen`
+        // which is the state *after* truncation.
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === activeConversationId) {
-                    return { ...conv, messages: [...conv.messages, aiMessagePlaceholder], timestamp: Date.now() };
+                    // It's crucial that 'baseMessagesForRegen' reflects the state *after* truncation.
+                    // Since `baseMessagesForRegen` was captured from the *previous* setConversations's scope,
+                    // we rely on it being correct.
+                    // A more robust way if `baseMessagesForRegen` wasn't captured from the updater:
+                    // `const currentMsgs = conv.messages; // These are already truncated by the first setConversations`
+                    // `return { ...conv, messages: [...currentMsgs, aiMessagePlaceholder], ... }`
+                    return { ...conv, messages: [...baseMessagesForRegen, aiMessagePlaceholder], timestamp: Date.now() };
                 }
                 return conv;
             })
         );
         
-        if (activeConversationId) {
-             streamResponseText(processedResponseText, newAiMessageId, activeConversationId);
-        } else {
-             console.error("Error: No active conversation ID to stream regenerated response to.");
-             setIsLoading(false);
-        }
+        // Stream into the newly added placeholder
+        // activeConversationId should still be valid here
+        streamResponseText(processedResponseText, newAiMessageId, activeConversationId);
+        // setIsLoading(false) is handled by streamResponseText on completion
 
     } catch (error: any) {
         console.error('Error regenerating AI response:', error);
@@ -662,10 +697,11 @@ export default function ChatPage() {
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                  if (conv.id === activeConversationId) {
-                    return { ...conv, messages: [...conv.messages, errorAiMessage], timestamp: Date.now() };
+                    // Add error message to the truncated list
+                    return { ...conv, messages: [...baseMessagesForRegen, errorAiMessage], timestamp: Date.now() };
                 }
                 return conv;
-            }).sort((a,b) => b.timestamp - a.timestamp)
+            })
         );
         setIsLoading(false);
     }
@@ -711,16 +747,19 @@ export default function ChatPage() {
       title: "Delete Conversation?",
       description: "Are you sure you want to delete this entire conversation? This action cannot be undone.",
       onConfirm: () => {
-        const newConversations = conversations.filter(conv => conv.id !== conversationId);
-        setConversations(newConversations); 
-        
-        if (activeConversationId === conversationId) {
-            if (newConversations.length > 0) {
-                setActiveConversationId([...newConversations].sort((a,b) => b.timestamp - a.timestamp)[0].id);
-            } else {
-                setActiveConversationId(null); 
+        setConversations(prevConversations => {
+            const newConversations = prevConversations.filter(conv => conv.id !== conversationId);
+            if (activeConversationId === conversationId) {
+                if (newConversations.length > 0) {
+                    // Sort by timestamp to find the most recent
+                    const mostRecent = [...newConversations].sort((a, b) => b.timestamp - a.timestamp)[0];
+                    setActiveConversationId(mostRecent.id);
+                } else {
+                    setActiveConversationId(null); 
+                }
             }
-        }
+            return newConversations;
+        });
         toast({ title: "Conversation deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
       },
@@ -919,7 +958,7 @@ export default function ChatPage() {
       </Sidebar>
       <SidebarRail />
       <SidebarInset className="flex flex-col !p-0">
-        <div className={cn("flex flex-col h-screen bg-background text-foreground", "animate-shadow-pulse")}>
+        <div className={cn("flex flex-col h-screen bg-background text-foreground", isLoading && "animate-shadow-pulse")}>
           <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
             <div className="flex items-center">
               <div className="md:hidden mr-2"> 
@@ -1029,3 +1068,6 @@ export default function ChatPage() {
   );
 }
 
+
+      
+    

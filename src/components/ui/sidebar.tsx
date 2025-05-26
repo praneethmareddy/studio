@@ -8,7 +8,7 @@ import { PanelLeft } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import { Button, buttonVariants } from "@/components/ui/button" // Ensure buttonVariants is imported
+import { Button, buttonVariants } from "@/components/ui/button" 
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
@@ -273,33 +273,25 @@ Sidebar.displayName = "Sidebar"
 const SidebarTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<typeof Button> & { asChild?: boolean; children?: React.ReactNode }
->(({ className, asChild: asChildProp = false, children: childrenProp, onClick, ...props }, ref) => {
+>(({ className, asChild: asChildProp, children: childrenProp, onClick, ...props }, ref) => {
   const { toggleSidebar } = useSidebar();
-  // Use !!asChildProp to ensure it's a boolean for the Comp decision
-  const Comp = !!asChildProp ? Slot : Button;
-  const effectiveAsChild = !!asChildProp; // Ensure this is strictly boolean
+  const isAsChild = !!asChildProp;
+  const Comp = isAsChild ? Slot : Button;
 
   return (
     <Comp
       ref={ref}
       className={cn(
-        // Use buttonVariants to apply base button styling if Comp is Button
-        // If asChild is true, these might be overridden by the child component's classes
-        Comp === Button && !effectiveAsChild && buttonVariants({ variant: 'ghost', size: 'icon' }),
-        "h-9 w-9", // Default size if not overridden
+        !isAsChild && buttonVariants({ variant: "ghost", size: "icon" }),
         className
       )}
       onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         toggleSidebar();
       }}
-      // Pass asChild only if Comp is Button and asChildProp is true
-      // or if Comp is Slot (meaning asChildProp was true)
-      asChild={Comp === Button ? effectiveAsChild : undefined}
-      {...props} // Spread remaining props
+      {...props}
     >
-      {/* If asChild is true, render childrenProp, otherwise render default icon */}
-      {effectiveAsChild ? childrenProp : (
+      {isAsChild ? childrenProp : (
         <>
           <PanelLeft className="h-[1.2rem] w-[1.2rem]" />
           <span className="sr-only">Toggle Sidebar</span>
@@ -534,19 +526,18 @@ const SidebarMenuItem = React.forwardRef<
     data-sidebar="menu-item"
     data-active={isActive ? 'true' : 'false'}
     className={cn(
-      "group/menu-item relative rounded-md", // Added rounded-md here
+      "group/menu-item relative rounded-md",
       "data-[active=true]:bg-[hsl(var(--sidebar-item-active-background))]",
       "data-[active=true]:text-[hsl(var(--sidebar-item-active-foreground))]",
-      // Active item pill indicator
       "data-[active=true]:before:content-['']",
       "data-[active=true]:before:absolute",
       "data-[active=true]:before:left-0",
       "data-[active=true]:before:top-1/2",
       "data-[active=true]:before:-translate-y-1/2",
-      "data-[active=true]:before:h-3/5", // Adjust height as needed
-      "data-[active=true]:before:w-1", // Width of the pill
-      "data-[active=true]:before:bg-primary", // Use primary color for the pill
-      "data-[active=true]:before:rounded-r-sm", // Optional: round the pill
+      "data-[active=true]:before:h-3/5", 
+      "data-[active=true]:before:w-1", 
+      "data-[active=true]:before:bg-primary", 
+      "data-[active=true]:before:rounded-r-sm", 
       className
       )}
     {...props}
@@ -608,8 +599,6 @@ const SidebarMenuButton = React.forwardRef<
         data-size={size}
          className={cn(
           sidebarMenuButtonVariants({ variant, size }),
-          // Ensure the button background is transparent when its parent LI is active
-          // so the LI's active background (with pill) shows through.
           "group-data-[active=true]/menu-item:bg-transparent group-data-[active=true]/menu-item:text-[hsl(var(--sidebar-item-active-foreground))] group-data-[active=true]/menu-item:hover:bg-[hsl(var(--sidebar-accent))]",
           className
         )}
@@ -760,15 +749,15 @@ const SidebarMenuSubItem = React.forwardRef<
 SidebarMenuSubItem.displayName = "SidebarMenuSubItem"
 
 const SidebarMenuSubButton = React.forwardRef<
-  HTMLAnchorElement,
-  React.ComponentProps<"a"> & {
+  HTMLAnchorElement, // Changed to HTMLAnchorElement, but can be Button as well if not a link
+  React.ComponentProps<"a"> & { // Changed to React.ComponentProps<"a">
     asChild?: boolean;
     size?: "sm" | "md";
     isActive?: boolean;
     children?: React.ReactNode; 
   }
 >(({ asChild = false, size = "md", isActive, className, children, ...props }, ref) => {
-  const Comp = asChild ? Slot : "a";
+  const Comp = asChild ? Slot : "a"; // Changed to "a" by default
   return (
     <Comp
       ref={ref}
@@ -817,5 +806,5 @@ export {
   SidebarTrigger,
   useSidebar,
 }
-
+    
     
