@@ -123,32 +123,47 @@ export function ChatMessage({
                : 'bg-card text-card-foreground rounded-lg rounded-bl-none'
           )}
         >
+          {/* File Info Section */}
           {message.file && (
              <div className={cn(
-                "px-3 pt-2 pb-1", 
+                "px-3 pt-3 pb-1.5", // Standardized padding for file block
                 isUser ? "text-primary-foreground/90" : "text-card-foreground/90",
               )}>
               <div className="flex items-center gap-2 text-xs">
                 <FileText size={16} className={cn(isUser ? "text-primary-foreground/80" : "text-muted-foreground")} />
                 <span className="truncate font-medium">{message.file.name}</span>
-                <span className={cn("ml-auto", isUser ? "text-primary-foreground/70" : "text-muted-foreground/80")}>
+                <span className={cn("ml-auto text-xs", isUser ? "text-primary-foreground/70" : "text-muted-foreground/80")}>
                   ({(message.file.size / 1024).toFixed(1)} KB)
                 </span>
               </div>
             </div>
           )}
-          <div className={cn("p-3 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
-            {isUser ? (
-              <span className="whitespace-pre-wrap">{message.text}</span>
-            ) : (
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {message.text}
-              </ReactMarkdown>
-            )}
-          </div>
-          <div className="flex items-center self-end px-3 pb-1.5 pt-0 text-xs">
+
+          {/* Separator Line */}
+          {message.file && message.text && message.text.trim() !== '' && (
+            <hr className={cn(
+              "mx-3 border-t", 
+              isUser ? "border-primary-foreground/30" : "border-card-foreground/20"
+            )} />
+          )}
+          
+          {/* Text Content Section */}
+          {message.text && message.text.trim() !== '' && (
+            <div className={cn("p-3 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
+              {isUser ? (
+                <span className="whitespace-pre-wrap">{message.text}</span>
+              ) : (
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {message.text}
+                </ReactMarkdown>
+              )}
+            </div>
+          )}
+
+          {/* Timestamp and Model Label Section */}
+          <div className="flex items-center self-end px-3 pb-1.5 pt-0 text-xs"> {/* pt-0 to minimize top space */}
             {!isUser && modelUsedLabel && (
-              <span className="mr-2 opacity-75 text-muted-foreground/80">via {modelUsedLabel}</span>
+              <span className="mr-2 opacity-70 text-muted-foreground/80">via {modelUsedLabel}</span>
             )}
             <span
               className={cn(
@@ -160,7 +175,8 @@ export function ChatMessage({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-0.5 opacity-0 group-hover/message:opacity-100 focus-within:opacity-100 transition-opacity duration-200 mb-1">
+        {/* Action Buttons Container */}
+        <div className="flex flex-col sm:flex-row items-center gap-0.5 opacity-0 group-hover/message:opacity-100 focus-within:opacity-100 transition-opacity duration-200 mb-1 self-center">
           {isUser && (
             <>
               <ActionButton onClick={() => onCopyUserMessage(message.text)} icon={Copy} tooltipText="Copy Text" />
@@ -168,7 +184,7 @@ export function ChatMessage({
               <ActionButton onClick={onDelete} icon={Trash2} tooltipText="Delete" className="hover:text-destructive text-destructive/80" />
             </>
           )}
-          {!isUser && (
+          {!isUser && message.text.trim() !== '' && ( // Only show AI actions if there's text (e.g. not just for an error placeholder)
             <>
               <ActionButton onClick={() => onCopyAIMessage(message.text)} icon={Copy} tooltipText="Copy" />
               <ActionButton onClick={onDownloadAIMessage} icon={Download} tooltipText="Download" />
@@ -190,4 +206,3 @@ export function ChatMessage({
     </div>
   );
 }
-
