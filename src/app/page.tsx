@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Menu, Paperclip } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Search, Menu, Paperclip } from 'lucide-react';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
   Select,
@@ -54,7 +54,7 @@ import {
 import { cn } from '@/lib/utils';
 import { isToday, isYesterday, differenceInDays, format } from 'date-fns';
 
-const CONVERSATIONS_STORAGE_KEY = 'genAiConfigGeneratorConversations'; // Updated key
+const CONVERSATIONS_STORAGE_KEY = 'genAiConfigGeneratorConversations';
 const STREAM_DELAY_MS = 50; 
 
 const sampleQueriesList = [
@@ -266,7 +266,7 @@ export default function ChatPage() {
 
   const streamResponseText = useCallback((fullText: string, messageId: string, conversationId: string) => {
     let currentDisplayedText = '';
-    const parts = fullText.split(/(\s+)/); 
+    const parts = fullText.split(/(\s+)/); // Split by space but keep spaces
     let partIndex = 0;
 
     const appendNextPart = () => {
@@ -308,21 +308,19 @@ export default function ChatPage() {
 
     if (file) {
       fileInfo = { name: file.name, type: file.type, size: file.size };
-      // For now, just prepend file name to query for backend awareness.
-      // Actual file sending would require FormData or base64, and backend changes.
       messageText = `[File Attached: ${file.name}] ${text}`.trim();
     }
-     if (!messageText.trim() && file) { // If only file is attached, use a placeholder text
+     if (!messageText.trim() && file) { 
       messageText = `File: ${file.name}`;
     }
 
 
     const newUserMessage: Message = {
       id: Date.now().toString(),
-      text: text, // Original text for display
+      text: text, 
       sender: 'user',
       timestamp: Date.now(),
-      file: fileInfo, // Store file info for UI display
+      file: fileInfo, 
     };
 
     setIsLoading(true);
@@ -349,10 +347,9 @@ export default function ChatPage() {
     updatedConversations.sort((a, b) => b.timestamp - a.timestamp);
     setConversations(updatedConversations); 
     setChatInputValue('');
-    setAttachedFile(null); // Clear attached file after sending
+    setAttachedFile(null);
 
     try {
-      // Using messageText (which includes file indication) for the backend query
       const backendResponse = await fetch('http://localhost:9000/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -419,7 +416,7 @@ export default function ChatPage() {
   const handleStartEditMessage = (message: Message) => {
     setEditingMessage(message);
     setEditingMessageText(message.text);
-    setAttachedFile(null); // Cannot edit files for now, clear if any
+    setAttachedFile(null); 
   };
 
   const handleSaveEditedMessage = async () => {
@@ -444,8 +441,6 @@ export default function ChatPage() {
   
     await new Promise(resolve => setTimeout(resolve, 0)); 
     
-    // For edited messages, we resend the text. File re-attachment during edit is not supported in this flow.
-    // If the original message had a file, its info is not passed here for resending.
     await handleSendMessage(editingMessageText.trim()); 
   
     setEditingMessage(null);
@@ -535,7 +530,7 @@ export default function ChatPage() {
           if (aiMessageIndex > 0 && conv.messages[aiMessageIndex - 1].sender === 'user') { 
             const userMessage = conv.messages[aiMessageIndex - 1];
             userPromptForAIMessage = userMessage.text;
-            userFileForAIMessage = userMessage.file; // Capture file info if present
+            userFileForAIMessage = userMessage.file; 
 
             const messagesUpToAIMessage = conv.messages.slice(0, aiMessageIndex -1); 
             return { ...conv, messages: messagesUpToAIMessage, timestamp: Date.now() };
@@ -545,15 +540,13 @@ export default function ChatPage() {
       }).sort((a,b) => b.timestamp - a.timestamp);
     });
   
-    if (userPromptForAIMessage || userFileForAIMessage) { // Check if either text or file exists
+    if (userPromptForAIMessage || userFileForAIMessage) { 
       setTimeout(() => {
-        // For regeneration, we can't directly resend the File object.
-        // We'll send the text and a placeholder indicating the file was originally present.
         let textToSend = userPromptForAIMessage;
         if (userFileForAIMessage) {
           textToSend = `[File Attached: ${userFileForAIMessage.name}] ${userPromptForAIMessage}`.trim();
         }
-        handleSendMessage(textToSend); // Send combined text; file object itself is not resent
+        handleSendMessage(textToSend); 
         toast({ title: "Regenerating response..." });
       }, 0);
     } else {
@@ -672,6 +665,16 @@ export default function ChatPage() {
               </span>
               <span className="sr-only group-data-[collapsible=expanded]:hidden">New Chat</span>
             </Button>
+             <div className="mt-2 relative group-data-[collapsible=icon]:hidden">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+              />
+              <Input
+                type="search"
+                placeholder="Search chats..."
+                className="w-full h-9 pl-10 pr-3 text-sm bg-input border-input focus:ring-ring"
+              />
+            </div>
           </div>
         </SidebarHeader>
         <SidebarContent className="p-0">
@@ -885,3 +888,4 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
+

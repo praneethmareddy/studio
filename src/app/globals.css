@@ -6,7 +6,7 @@
 @layer base {
   /* Light theme variables (default) */
   :root {
-    --background: 0 0% 100%; /* White */
+    --background: 0 0% 100%; /* White - Main content background */
     --foreground: 222 47% 11%; /* Dark Desaturated Blue (Text on White) */
 
     --card: 0 0% 97.5%; /* Slightly Lighter Grey for Card Background */
@@ -43,7 +43,7 @@
     --chart-5: 0 75% 60%;
 
     /* Sidebar specific variables - Light Theme */
-    --sidebar-background: 220 20% 96%; /* Very Light Grey, almost white */
+    --sidebar-background: 220 20% 96%; /* Very Light Grey, slightly distinct from main background */
     --sidebar-foreground: 222 47% 20%; /* Dark text for sidebar */
     --sidebar-primary: 217 91% 55%; /* Sidebar Primary Action Color */
     --sidebar-primary-foreground: 0 0% 100%; /* Sidebar Text on Primary */
@@ -59,10 +59,10 @@
 
   /* Dark theme variables */
   .dark {
-    --background: 222 47% 11%;
+    --background: 222 47% 11%; /* Main content background - deep dark blue */
     --foreground: 210 40% 96%;
 
-    --card: 222 40% 15%; /* Slightly lighter and less saturated card for dark theme */
+    --card: 222 40% 15%; /* Card background - slightly lighter than main dark */
     --card-foreground: 210 40% 96%;
 
     --popover: 222 47% 12%;
@@ -94,7 +94,7 @@
     --chart-5: 215 20% 65%;
 
     /* Sidebar specific variables - Dark Theme */
-    --sidebar-background: 222 47% 9%;
+    --sidebar-background: 222 47% 9%; /* Sidebar slightly darker than main dark background */
     --sidebar-foreground: 210 40% 90%;
     --sidebar-primary: 217 91% 60%;
     --sidebar-primary-foreground: 210 40% 98%;
@@ -104,7 +104,7 @@
     --sidebar-ring: 217 91% 65%;
 
     /* Active Sidebar Item - Dark Theme */
-    --sidebar-item-active-background: 222 40% 22%; /* Distinct slightly lighter grey */
+    --sidebar-item-active-background: 222 40% 22%; /* Distinct slightly lighter grey for active item */
     --sidebar-item-active-foreground: 210 40% 98%; /* Bright text on active item */
   }
 }
@@ -135,4 +135,3 @@
     transform: translateY(0px);
   }
 }
-
