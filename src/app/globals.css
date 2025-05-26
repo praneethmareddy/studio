@@ -127,6 +127,9 @@
   .animate-shadow-pulse {
     animation: shadow-pulse 2s infinite;
   }
+  .animate-robot-bob {
+    animation: robot-bob 1.5s ease-in-out infinite;
+  }
 }
 
 @keyframes float {
@@ -151,4 +154,9 @@
   100% {
     box-shadow: 0 0 0 0px hsl(var(--primary) / 0);
   }
+}
+
+@keyframes robot-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
 }

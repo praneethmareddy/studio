@@ -6,7 +6,6 @@ from 'react';
 import type { Message, Conversation } from '@/lib/types';
 import { ChatHistory } from '@/components/chat/ChatHistory';
 import { ChatInput } from '@/components/chat/ChatInput';
-import { ChatLogo } from '@/components/icons/ChatLogo';
 import { SampleQueries } from '@/components/sample-queries/SampleQueries';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from '@/components/ui/button';
@@ -573,7 +572,7 @@ export default function ChatPage() {
     const currentConversation = conversations[conversationIndex];
     const aiMessageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
 
-    if (aiMessageIndex <= 0) { // AI message must have a preceding user message
+    if (aiMessageIndex <= 0) { 
         toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
         return;
     }
@@ -583,9 +582,7 @@ export default function ChatPage() {
         toast({ title: "Error", description: "Cannot regenerate. Preceding message is not from user.", variant: "destructive" });
         return;
     }
-
-    // Truncate messages: Keep all messages up to (and including) the promptingUserMessage, 
-    // but remove the AI message to be regenerated and all subsequent messages.
+    
     const messagesUpToPromptingUserMessage = currentConversation.messages.slice(0, aiMessageIndex);
 
 
@@ -597,15 +594,13 @@ export default function ChatPage() {
         ).sort((a, b) => b.timestamp - a.timestamp)
     );
     
-    // Ensure state update for truncation completes before fetching new AI response
     await new Promise(resolve => setTimeout(resolve, 0)); 
 
     setIsLoading(true);
     toast({ title: "Regenerating AI response..." });
 
     let queryTextForBackend = promptingUserMessage.text;
-    let originalFileDetailsForBackend = promptingUserMessage.file;
-
+    
     if (promptingUserMessage.file) {
         queryTextForBackend = `[File Attached: ${promptingUserMessage.file.name}] ${promptingUserMessage.text}`.trim();
         if (!promptingUserMessage.text.trim() && promptingUserMessage.file) { 
@@ -617,7 +612,7 @@ export default function ChatPage() {
         const backendResponse = await fetch('http://localhost:9000/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: queryTextForBackend, model: selectedModel }), // Use selectedModel
+            body: JSON.stringify({ query: queryTextForBackend, model: selectedModel }),
         });
 
         if (!backendResponse.ok) {
@@ -643,7 +638,6 @@ export default function ChatPage() {
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === activeConversationId) {
-                    // Append to the correctly truncated message list
                     return { ...conv, messages: [...conv.messages, aiMessagePlaceholder], timestamp: Date.now() };
                 }
                 return conv;
@@ -942,6 +936,16 @@ export default function ChatPage() {
                {selectedModel === 'llama3' && <Cpu size={24} className="text-primary mr-2" />}
                {selectedModel === 'deepseek-r1' && <Brain size={24} className="text-primary mr-2" />}
               <h1 className="text-xl font-semibold text-foreground">GenAI Config Generator</h1>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="ml-2 animate-robot-bob text-primary">
+                <rect x="4" y="8" width="16" height="10" rx="2" fill="currentColor"/>
+                <rect x="7" y="5" width="10" height="5" rx="1" fill="currentColor"/>
+                <circle cx="8" cy="12" r="1" fill="var(--background)"/>
+                <circle cx="16" cy="12" r="1" fill="var(--background)"/>
+                <line x1="7" y1="18" x2="7" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="17" y1="18" x2="17" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="10" y1="5" x2="10" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="14" y1="5" x2="14" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
             </div>
             <div className="flex items-center gap-2">
               <Select value={selectedModel} onValueChange={setSelectedModel}>
