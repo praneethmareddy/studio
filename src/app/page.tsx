@@ -199,13 +199,8 @@ export default function ChatPage() {
       setActiveConversationId(mostRecent ? mostRecent.id : null);
     } else if (conversations.length === 0 && activeConversationId) {
       setActiveConversationId(null);
-    } else if (conversations.length > 0 && !activeConversationId && !editingConversation && !editingMessage && !sidebarSearchTerm) {
-      // If no chat is active and we are not in an editing/searching state, auto-select the most recent
-      // This was removed to allow "New Chat" state to persist, but can be re-added if default selection is desired
-      // const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
-      // setActiveConversationId(mostRecent.id);
     }
-  }, [conversations, activeConversationId, editingConversation, editingMessage, sidebarSearchTerm]);
+  }, [conversations, activeConversationId]);
 
 
   useEffect(() => {
@@ -388,7 +383,7 @@ export default function ChatPage() {
     setAttachedFile(null); 
 
     try {
-      const backendResponse = await fetch('http://localhost:9000/query', {
+      const backendResponse = await fetch('http://localhost:5000/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: messageTextForQuery, model: selectedModel }),
@@ -590,7 +585,7 @@ export default function ChatPage() {
         const currentConversation = prevConvs[convIndex];
         const aiMessageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
 
-        if (aiMessageIndex <= 0) { // AI message must have a preceding user message
+        if (aiMessageIndex <= 0) { 
             toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
             return prevConvs;
         }
@@ -602,7 +597,6 @@ export default function ChatPage() {
         }
         
         promptingUserMessage = userMsg; 
-        // Truncate to *include* the user prompt, but *exclude* the AI message being regenerated and anything after.
         baseMessagesForRegen = currentConversation.messages.slice(0, aiMessageIndex); 
 
         const updatedConvs = [...prevConvs];
@@ -614,7 +608,6 @@ export default function ChatPage() {
         return updatedConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
     
-    // Ensure state update has propagated
     await new Promise(resolve => setTimeout(resolve, 0)); 
     
     if (!promptingUserMessage) {
@@ -635,7 +628,7 @@ export default function ChatPage() {
     }
 
     try {
-        const backendResponse = await fetch('http://localhost:9000/query', {
+        const backendResponse = await fetch('http://localhost:5000/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: queryTextForBackend, model: selectedModel }), 
@@ -661,12 +654,9 @@ export default function ChatPage() {
             modelUsed: selectedModel, 
         };
         
-        // Add placeholder to the already truncated list of messages
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === activeConversationId) {
-                    // baseMessagesForRegen was captured from previous setConversations scope
-                    // It represents the state *after* truncation and before adding the placeholder
                     return { ...conv, messages: [...baseMessagesForRegen, aiMessagePlaceholder], timestamp: Date.now() };
                 }
                 return conv;
@@ -691,7 +681,6 @@ export default function ChatPage() {
           timestamp: Date.now(),
           modelUsed: selectedModel, 
         };
-        // Add error message to the truncated list
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                  if (conv.id === activeConversationId) {
@@ -1063,3 +1052,5 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
+
+    
