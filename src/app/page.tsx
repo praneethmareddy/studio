@@ -136,7 +136,6 @@ export default function ChatPage() {
   const streamTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 
-  // Effect for initial loading of conversations and active ID from localStorage
   useEffect(() => {
     try {
       const storedConversations = localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
@@ -145,9 +144,11 @@ export default function ChatPage() {
         if (loadedConversations.length > 0) {
           setConversations(loadedConversations);
           const currentActiveIdFromStorage = localStorage.getItem('activeConversationId');
-          if (currentActiveIdFromStorage && loadedConversations.find(c => c.id === currentActiveIdFromStorage)) {
+          const isValidId = loadedConversations.find(c => c.id === currentActiveIdFromStorage);
+          
+          if (currentActiveIdFromStorage && isValidId) {
             setActiveConversationId(currentActiveIdFromStorage);
-          } else if (loadedConversations.length > 0) { // If stored ID is invalid or not present, pick most recent
+          } else if (loadedConversations.length > 0) { 
             const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
             setActiveConversationId(mostRecent.id);
           }
@@ -164,7 +165,6 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
- // Effect for saving activeConversationId to localStorage
  useEffect(() => {
     if (activeConversationId) {
         localStorage.setItem('activeConversationId', activeConversationId);
@@ -173,7 +173,6 @@ export default function ChatPage() {
     }
   }, [activeConversationId]);
 
- // Effect for saving conversations to localStorage
  useEffect(() => {
     if (conversations.length > 0 || localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
         try {
@@ -187,17 +186,15 @@ export default function ChatPage() {
             });
         }
     } else if (conversations.length === 0 && localStorage.getItem(CONVERSATIONS_STORAGE_KEY)) {
-        // If conversations array is empty and there was something in storage, remove it.
         localStorage.removeItem(CONVERSATIONS_STORAGE_KEY);
     }
   }, [conversations, toast]);
 
-  // Effect to ensure activeConversationId remains valid if conversations change (e.g., deletion)
   useEffect(() => {
     if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
       const mostRecent = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
       setActiveConversationId(mostRecent ? mostRecent.id : null);
-    } else if (conversations.length === 0 && activeConversationId) {
+    } else if (conversations.length === 0 && activeConversationId !== null) { // Only set to null if it's not already null
       setActiveConversationId(null);
     }
   }, [conversations, activeConversationId]);
@@ -259,7 +256,7 @@ export default function ChatPage() {
 
   const handleNewChat = () => {
     setEditingConversation(null);
-    setActiveConversationId(null);
+    setActiveConversationId(null); 
     setChatInputValue('');
     setEditingMessage(null);
     setAttachedFile(null);
@@ -333,19 +330,19 @@ export default function ChatPage() {
 
     let displayMessageText = trimmedText;
     let fileInfo: Message['file'] | undefined = undefined;
-    let messageTextForQuery = trimmedText;
+    let messageTextForBackend = trimmedText;
 
     if (file) { 
         fileInfo = { name: file.name, type: file.type, size: file.size };
-        messageTextForQuery = `[File Attached: ${file.name}] ${trimmedText}`.trim();
+        messageTextForBackend = `[File Attached: ${file.name}] ${trimmedText}`.trim();
     } else if (options?.originalFileDetails) { 
         fileInfo = options.originalFileDetails;
-        messageTextForQuery = `[File Attached: ${options.originalFileDetails.name}] ${trimmedText}`.trim();
+        messageTextForBackend = `[File Attached: ${options.originalFileDetails.name}] ${trimmedText}`.trim();
     }
     
     if (!trimmedText && fileInfo) { 
       displayMessageText = `File: ${fileInfo.name}`;
-      messageTextForQuery = `File: ${fileInfo.name}`;
+      messageTextForBackend = `File: ${fileInfo.name}`;
     }
 
     const newUserMessage: Message = {
@@ -383,21 +380,70 @@ export default function ChatPage() {
     setAttachedFile(null); 
 
     try {
-      const backendResponse = await fetch('http://localhost:5000/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: messageTextForQuery, model: selectedModel }),
-      });
+      let backendResponse;
+      const requestOptions: RequestInit = { method: 'POST' };
+
+      if (file) { // If a new file is being uploaded
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+        formData.append('query', messageTextForBackend);
+        // formData.append('model', selectedModel); // Backend doesn't seem to use this
+        requestOptions.body = formData;
+        // For FormData, browser sets Content-Type automatically
+      } else { // No new file, or resending with original file details
+        requestOptions.headers = { 'Content-Type': 'application/json' };
+        requestOptions.body = JSON.stringify({ query: messageTextForBackend, model: selectedModel });
+      }
+      
+      backendResponse = await fetch('http://localhost:5000/query', requestOptions);
 
       if (!backendResponse.ok) {
-        const errorData = await backendResponse.text();
-        throw new Error(`HTTP error! status: ${backendResponse.status}, message: ${errorData}`);
+        const errorText = await backendResponse.text();
+        throw new Error(`HTTP error! status: ${backendResponse.status}, message: ${errorText}`);
       }
+      
+      const contentType = backendResponse.headers.get("content-type");
+      let aiResponseText = "";
+      let isFileDownload = false;
 
-      let aiResponseText: string = await backendResponse.json();
+      if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
+        isFileDownload = true;
+        const blob = await backendResponse.blob();
+        const contentDisposition = backendResponse.headers.get('Content-Disposition');
+        let filename = "downloaded_file.xlsx"; // Default filename
+        if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+            if (filenameMatch && filenameMatch.length > 1) {
+                filename = filenameMatch[1];
+            }
+        }
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        
+        aiResponseText = `Successfully downloaded '${filename}'.`;
+        toast({ title: "File Downloaded", description: `'${filename}' has been downloaded.` });
+
+      } else if (contentType && contentType.includes("application/json")){
+        const jsonResponse = await backendResponse.json();
+        if (jsonResponse.error) {
+            throw new Error(jsonResponse.error);
+        }
+        aiResponseText = jsonResponse.response || "Received an empty response.";
+      } else {
+        // Fallback for unexpected content types, try to read as text
+        aiResponseText = await backendResponse.text();
+        if (!aiResponseText) aiResponseText = "Received an unexpected response type from the server.";
+      }
+      
       let processedResponseText = aiResponseText;
-
-      if (selectedModel === 'deepseek-r1') {
+      if (selectedModel === 'deepseek-r1' && !isFileDownload) { // Don't process if it's a file download confirmation
         processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
       }
 
@@ -429,12 +475,12 @@ export default function ChatPage() {
       console.error('Error sending message to backend:', error);
       toast({
         title: "API Error",
-        description: `Sorry, I couldn't get a response. ${error.message}`,
+        description: `Sorry, I couldn't get a response. ${error.message || 'Unknown error'}`,
         variant: "destructive",
       });
        const errorAiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: "Sorry, I couldn't connect to the AI. Please check if the backend server is running or try again later.",
+        text: `Sorry, an error occurred: ${error.message || 'Could not connect to the AI.'}. Please check if the backend server is running or try again later.`,
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
@@ -470,8 +516,6 @@ export default function ChatPage() {
         if (conv.id === activeConversationId) {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
           if (messageIndex === -1) return conv;
-          // Truncate messages up to the point of the message being edited.
-          // The original user message being edited will be "resent" by handleSendMessage.
           const messagesUpToEdit = conv.messages.slice(0, messageIndex);
           return {
             ...conv,
@@ -482,11 +526,9 @@ export default function ChatPage() {
         return conv;
       }).sort((a,b) => b.timestamp - a.timestamp);
     });
-
-    // Allow state to update before resending
+    
     await new Promise(resolve => setTimeout(resolve, 0)); 
 
-    // Resend the message. Pass original file details if they existed.
     await handleSendMessage(editingMessageText.trim(), undefined, { originalFileDetails: originalMessageDetails.file });
 
     setEditingMessage(null);
@@ -522,9 +564,6 @@ export default function ChatPage() {
           return conv;
         }).filter(conv => { 
             if (conv.id === activeConversationId && conv.messages.length === 0) {
-                 // If deleting the last message makes the conversation empty,
-                 // we might want to handle its deletion or keep it as an empty chat
-                 // For now, we keep it, but it won't show messages.
             }
             return true; 
          })
@@ -572,46 +611,49 @@ export default function ChatPage() {
     }
   };
 
- const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
+const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     if (!activeConversationId) return;
 
     let promptingUserMessage: Message | undefined;
     let baseMessagesForRegen: Message[] = [];
+    let currentConversationForRegen: Conversation | undefined;
 
     setConversations(prevConvs => {
         const convIndex = prevConvs.findIndex(c => c.id === activeConversationId);
         if (convIndex === -1) return prevConvs;
 
-        const currentConversation = prevConvs[convIndex];
-        const aiMessageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
+        currentConversationForRegen = prevConvs[convIndex];
+        const aiMessageIndex = currentConversationForRegen.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
 
         if (aiMessageIndex <= 0) { 
             toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
             return prevConvs;
         }
         
-        const userMsg = currentConversation.messages[aiMessageIndex - 1];
+        const userMsg = currentConversationForRegen.messages[aiMessageIndex - 1];
         if (userMsg.sender !== 'user') {
             toast({ title: "Error", description: "Cannot regenerate. Preceding message is not from user.", variant: "destructive" });
             return prevConvs;
         }
         
         promptingUserMessage = userMsg; 
-        baseMessagesForRegen = currentConversation.messages.slice(0, aiMessageIndex); 
+        // Truncate messages to *include* the user prompt, removing the old AI response and subsequent messages.
+        baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex); 
 
         const updatedConvs = [...prevConvs];
         updatedConvs[convIndex] = {
-            ...currentConversation,
+            ...currentConversationForRegen,
             messages: baseMessagesForRegen, 
             timestamp: Date.now(),
         };
         return updatedConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
     
+    // Allow state to update before proceeding
     await new Promise(resolve => setTimeout(resolve, 0)); 
     
-    if (!promptingUserMessage) {
-        console.error("Regeneration failed: prompting user message not captured.");
+    if (!promptingUserMessage || !currentConversationId) { // Check currentConversationId again as it might have changed contextually
+        console.error("Regeneration failed: prompting user message or active conversation ID not captured correctly.");
         setIsLoading(false);
         return;
     }
@@ -620,6 +662,8 @@ export default function ChatPage() {
     toast({ title: "Regenerating AI response..." });
     
     let queryTextForBackend = promptingUserMessage.text;
+    // For regeneration, we assume the file context is part of the text (e.g., "[File Attached: name.xlsx]")
+    // We don't re-upload the file itself during regeneration, backend relies on text.
     if (promptingUserMessage.file) {
         queryTextForBackend = `[File Attached: ${promptingUserMessage.file.name}] ${promptingUserMessage.text}`.trim();
         if (!promptingUserMessage.text.trim() && promptingUserMessage.file) { 
@@ -628,6 +672,7 @@ export default function ChatPage() {
     }
 
     try {
+        // Regeneration always sends JSON, as it doesn't involve re-uploading the file itself
         const backendResponse = await fetch('http://localhost:5000/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -638,15 +683,29 @@ export default function ChatPage() {
             const errorData = await backendResponse.text();
             throw new Error(`HTTP error! status: ${backendResponse.status}, message: ${errorData}`);
         }
+        
+        const contentType = backendResponse.headers.get("content-type");
+        let aiResponseText = "";
 
-        let aiResponseText: string = await backendResponse.json();
+        if (contentType && contentType.includes("application/json")) {
+            const jsonResponse = await backendResponse.json();
+            if (jsonResponse.error) {
+                throw new Error(jsonResponse.error);
+            }
+            aiResponseText = jsonResponse.response || "Received an empty response.";
+        } else {
+             // Handle unexpected non-JSON response during regeneration
+            aiResponseText = await backendResponse.text() || "Received non-JSON response during regeneration.";
+            toast({ title: "Warning", description: "Received non-JSON response during regeneration. Displaying as text.", variant: "default" });
+        }
+
         let processedResponseText = aiResponseText;
         if (selectedModel === 'deepseek-r1') { 
             processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         }
 
         const newAiMessageId = (Date.now() + 1).toString(); 
-        const aiMessagePlaceholder: Message = {
+        const newAiMessagePlaceholder: Message = { // Renamed to avoid conflict
             id: newAiMessageId,
             text: '', 
             sender: 'ai',
@@ -654,10 +713,11 @@ export default function ChatPage() {
             modelUsed: selectedModel, 
         };
         
+        // Add the new AI message placeholder to the already truncated message list
         setConversations(prevConvs =>
             prevConvs.map(conv => {
-                if (conv.id === activeConversationId) {
-                    return { ...conv, messages: [...baseMessagesForRegen, aiMessagePlaceholder], timestamp: Date.now() };
+                if (conv.id === activeConversationId) { // Use activeConversationId which should be set
+                    return { ...conv, messages: [...baseMessagesForRegen, newAiMessagePlaceholder], timestamp: Date.now() };
                 }
                 return conv;
             })
@@ -665,25 +725,29 @@ export default function ChatPage() {
         
         if (activeConversationId) {
           streamResponseText(processedResponseText, newAiMessageId, activeConversationId);
+        } else {
+             console.error("Error: No active conversation ID to stream regenerated response to.");
+             setIsLoading(false);
         }
 
     } catch (error: any) {
         console.error('Error regenerating AI response:', error);
         toast({
             title: "API Error",
-            description: `Sorry, I couldn't regenerate the response. ${error.message}`,
+            description: `Sorry, I couldn't regenerate the response. ${error.message || 'Unknown error'}`,
             variant: "destructive",
         });
         const errorAiMessage: Message = {
           id: (Date.now() + 1).toString(),
-          text: "Sorry, I couldn't regenerate the response. Please try again.",
+          text: `Sorry, I couldn't regenerate the response. ${error.message || 'Please try again.'}`,
           sender: 'ai',
           timestamp: Date.now(),
           modelUsed: selectedModel, 
         };
         setConversations(prevConvs =>
             prevConvs.map(conv => {
-                 if (conv.id === activeConversationId) {
+                 if (conv.id === activeConversationId) { // Use activeConversationId
+                    // Add error message to the already truncated list
                     return { ...conv, messages: [...baseMessagesForRegen, errorAiMessage], timestamp: Date.now() };
                 }
                 return conv;
