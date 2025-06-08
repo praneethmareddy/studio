@@ -194,7 +194,7 @@ export default function ChatPage() {
     if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
       const mostRecent = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
       setActiveConversationId(mostRecent ? mostRecent.id : null);
-    } else if (conversations.length === 0 && activeConversationId !== null) { // Only set to null if it's not already null
+    } else if (conversations.length === 0 && activeConversationId !== null) { 
       setActiveConversationId(null);
     }
   }, [conversations, activeConversationId]);
@@ -205,8 +205,18 @@ export default function ChatPage() {
       if (streamTimeoutRef.current) {
         clearTimeout(streamTimeoutRef.current);
       }
+      // Clean up any object URLs when the component unmounts
+      // This is a broad cleanup; more specific cleanup might be needed if URLs are managed differently
+      conversations.forEach(conv => {
+        conv.messages.forEach(msg => {
+          if (msg.downloadableFile?.blobUrl) {
+            URL.revokeObjectURL(msg.downloadableFile.blobUrl);
+          }
+        });
+      });
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations]); // Add conversations to dependency array for cleanup
 
   const activeConversation = useMemo(() => {
     return conversations.find(conv => conv.id === activeConversationId);
@@ -322,11 +332,10 @@ export default function ChatPage() {
 
  const handleSendMessage = useCallback(async (
     text: string, 
-    file?: File, 
-    options?: { originalFileDetails?: Message['file'] }
+    file?: File
   ) => {
     const trimmedText = text.trim();
-    if (!trimmedText && !file && !options?.originalFileDetails) return;
+    if (!trimmedText && !file) return;
 
     let displayMessageText = trimmedText;
     let fileInfo: Message['file'] | undefined = undefined;
@@ -335,9 +344,6 @@ export default function ChatPage() {
     if (file) { 
         fileInfo = { name: file.name, type: file.type, size: file.size };
         messageTextForBackend = `[File Attached: ${file.name}] ${trimmedText}`.trim();
-    } else if (options?.originalFileDetails) { 
-        fileInfo = options.originalFileDetails;
-        messageTextForBackend = `[File Attached: ${options.originalFileDetails.name}] ${trimmedText}`.trim();
     }
     
     if (!trimmedText && fileInfo) { 
@@ -383,14 +389,12 @@ export default function ChatPage() {
       let backendResponse;
       const requestOptions: RequestInit = { method: 'POST' };
 
-      if (file) { // If a new file is being uploaded
+      if (file) {
         const formData = new FormData();
         formData.append('file', file, file.name);
         formData.append('query', messageTextForBackend);
-        // formData.append('model', selectedModel); // Backend doesn't seem to use this
         requestOptions.body = formData;
-        // For FormData, browser sets Content-Type automatically
-      } else { // No new file, or resending with original file details
+      } else { 
         requestOptions.headers = { 'Content-Type': 'application/json' };
         requestOptions.body = JSON.stringify({ query: messageTextForBackend, model: selectedModel });
       }
@@ -404,13 +408,14 @@ export default function ChatPage() {
       
       const contentType = backendResponse.headers.get("content-type");
       let aiResponseText = "";
-      let isFileDownload = false;
+      let downloadableFile: Message['downloadableFile'] | undefined = undefined;
 
       if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
-        isFileDownload = true;
         const blob = await backendResponse.blob();
         const contentDisposition = backendResponse.headers.get('Content-Disposition');
-        let filename = "downloaded_file.xlsx"; // Default filename
+        let filename = "downloaded_file"; 
+        if (contentType.includes("spreadsheetml.sheet")) filename += ".xlsx";
+
         if (contentDisposition) {
             const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
             if (filenameMatch && filenameMatch.length > 1) {
@@ -418,17 +423,10 @@ export default function ChatPage() {
             }
         }
         
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-        
-        aiResponseText = `Successfully downloaded '${filename}'.`;
-        toast({ title: "File Downloaded", description: `'${filename}' has been downloaded.` });
+        const blobUrl = URL.createObjectURL(blob);
+        downloadableFile = { name: filename, type: blob.type, blobUrl };
+        aiResponseText = `File '${filename}' is ready for download.`;
+        toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.` });
 
       } else if (contentType && contentType.includes("application/json")){
         const jsonResponse = await backendResponse.json();
@@ -437,13 +435,12 @@ export default function ChatPage() {
         }
         aiResponseText = jsonResponse.response || "Received an empty response.";
       } else {
-        // Fallback for unexpected content types, try to read as text
         aiResponseText = await backendResponse.text();
         if (!aiResponseText) aiResponseText = "Received an unexpected response type from the server.";
       }
       
       let processedResponseText = aiResponseText;
-      if (selectedModel === 'deepseek-r1' && !isFileDownload) { // Don't process if it's a file download confirmation
+      if (selectedModel === 'deepseek-r1' && !downloadableFile) {
         processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
       }
 
@@ -454,6 +451,7 @@ export default function ChatPage() {
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
+        downloadableFile: downloadableFile,
       };
 
       setConversations(prevConvs =>
@@ -504,36 +502,154 @@ export default function ChatPage() {
 
  const handleSaveEditedMessage = async () => {
     if (!editingMessage || !activeConversationId) return;
-    if (!editingMessageText.trim() && !editingMessage.file) { 
-        toast({ title: "Cannot send empty message", variant: "destructive" });
-        return;
+
+    const trimmedEditingText = editingMessageText.trim();
+    if (!trimmedEditingText && !editingMessage.file) {
+      toast({ title: "Cannot send empty message", variant: "destructive" });
+      return;
     }
 
-    const originalMessageDetails = editingMessage;
+    const currentConvId = activeConversationId; // Capture for stable use in async flow
 
-    setConversations(prev => {
-      return prev.map(conv => {
-        if (conv.id === activeConversationId) {
+    // Prepare the text content for the backend, including file marker if original message had a file
+    let textForBackend = trimmedEditingText;
+    if (editingMessage.file) {
+      textForBackend = `[File Attached: ${editingMessage.file.name}] ${trimmedEditingText}`.trim();
+      // If user cleared the text but file was originally present
+      if (!trimmedEditingText) {
+        textForBackend = `File: ${editingMessage.file.name}`;
+      }
+    }
+     // Final fallback if text is empty but file exists
+    if (!textForBackend && editingMessage.file) {
+        textForBackend = `File: ${editingMessage.file.name}`;
+    }
+
+
+    let updatedUserMessageWithOriginalId: Message | null = null;
+
+    // Update the user message in place and remove subsequent messages
+    setConversations(prevConvs =>
+      prevConvs.map(conv => {
+        if (conv.id === currentConvId) {
           const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
           if (messageIndex === -1) return conv;
-          const messagesUpToEdit = conv.messages.slice(0, messageIndex);
+
+          // Create the updated user message, keeping original ID but updating text and timestamp
+          updatedUserMessageWithOriginalId = {
+            ...conv.messages[messageIndex], // Spread original message to keep file, sender etc.
+            text: trimmedEditingText, // User's edited text for display
+            timestamp: Date.now(), // Update timestamp of the user's edited message
+          };
+
           return {
             ...conv,
-            messages: messagesUpToEdit,
-            timestamp: Date.now(),
+            // Replace messages from the edited one onwards with just the updated user message
+            messages: [...conv.messages.slice(0, messageIndex), updatedUserMessageWithOriginalId],
+            timestamp: Date.now(), // Update conversation timestamp
           };
         }
         return conv;
-      }).sort((a,b) => b.timestamp - a.timestamp);
-    });
-    
-    await new Promise(resolve => setTimeout(resolve, 0)); 
+      }).sort((a, b) => b.timestamp - a.timestamp)
+    );
 
-    await handleSendMessage(editingMessageText.trim(), undefined, { originalFileDetails: originalMessageDetails.file });
-
+    // Reset editing state
     setEditingMessage(null);
     setEditingMessageText('');
-    toast({ title: "Message edited and resent" });
+    setIsLoading(true);
+    toast({ title: "Resending edited message..." });
+
+    // Now, fetch a new AI response based on this `textForBackend`
+    try {
+      const backendResponse = await fetch('http://localhost:5000/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // For edits/resends, we don't re-upload the file itself, backend relies on text marker.
+        body: JSON.stringify({ query: textForBackend, model: selectedModel }),
+      });
+
+      if (!backendResponse.ok) {
+        const errorText = await backendResponse.text();
+        throw new Error(`HTTP error! status: ${backendResponse.status}, message: ${errorText}`);
+      }
+
+      const contentType = backendResponse.headers.get("content-type");
+      let aiResponseText = "";
+      let downloadableFile: Message['downloadableFile'] | undefined = undefined;
+
+      if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
+        const blob = await backendResponse.blob();
+        const contentDisposition = backendResponse.headers.get('Content-Disposition');
+        let filename = "downloaded_file";
+        if (contentType.includes("spreadsheetml.sheet")) filename += ".xlsx";
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+          if (filenameMatch && filenameMatch.length > 1) filename = filenameMatch[1];
+        }
+        const blobUrl = URL.createObjectURL(blob);
+        downloadableFile = { name: filename, type: blob.type, blobUrl };
+        aiResponseText = `File '${filename}' is ready for download.`;
+        toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.`});
+      } else if (contentType && contentType.includes("application/json")) {
+        const jsonResponse = await backendResponse.json();
+        if (jsonResponse.error) throw new Error(jsonResponse.error);
+        aiResponseText = jsonResponse.response || "Received an empty response.";
+      } else {
+        aiResponseText = await backendResponse.text() || "Received an unexpected response type.";
+      }
+
+      let processedResponseText = aiResponseText;
+      if (selectedModel === 'deepseek-r1' && !downloadableFile) {
+        processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      }
+
+      const newAiMessageId = (Date.now() + 1).toString();
+      const aiMessagePlaceholder: Message = {
+        id: newAiMessageId,
+        text: '', // Start with empty, will be filled by streaming
+        sender: 'ai',
+        timestamp: Date.now(),
+        modelUsed: selectedModel,
+        downloadableFile: downloadableFile,
+      };
+
+      setConversations(prevConvs =>
+        prevConvs.map(conv =>
+          conv.id === currentConvId
+            ? { ...conv, messages: [...conv.messages, aiMessagePlaceholder], timestamp: Date.now() }
+            : conv
+        )
+      );
+      
+      if (currentConvId) {
+        streamResponseText(processedResponseText, newAiMessageId, currentConvId);
+      } else {
+         setIsLoading(false);
+      }
+
+    } catch (error: any) {
+      console.error('Error resending edited message:', error);
+      toast({
+        title: "API Error",
+        description: `Sorry, I couldn't get a new response. ${error.message || 'Unknown error'}`,
+        variant: "destructive",
+      });
+      const errorAiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: `Error getting new response: ${error.message || 'Please try again.'}`,
+        sender: 'ai',
+        timestamp: Date.now(),
+        modelUsed: selectedModel,
+      };
+      setConversations(prevConvs =>
+        prevConvs.map(conv =>
+          conv.id === currentConvId
+            ? { ...conv, messages: [...conv.messages, errorAiMessage], timestamp: Date.now() }
+            : conv
+        )
+      );
+      setIsLoading(false);
+    }
   };
 
 
@@ -554,6 +670,7 @@ export default function ChatPage() {
             const messageIndex = conv.messages.findIndex(msg => msg.id === messageId);
             if (messageIndex !== -1) {
               const updatedMessages = conv.messages.slice(0, messageIndex);
+              // If deleting the message results in an empty conversation, mark for removal or handle title
               return {
                 ...conv,
                 messages: updatedMessages,
@@ -563,8 +680,10 @@ export default function ChatPage() {
           }
           return conv;
         }).filter(conv => { 
-            if (conv.id === activeConversationId && conv.messages.length === 0) {
-            }
+            // Optional: remove conversation if it becomes empty after deletion
+            // if (conv.id === activeConversationId && conv.messages.length === 0) {
+            //   return false; // This would delete the conversation
+            // }
             return true; 
          })
          .sort((a,b) => b.timestamp - a.timestamp)
@@ -594,9 +713,16 @@ export default function ChatPage() {
   };
 
   const handleDownloadAIMessage = (messageId: string) => {
+    // This function might need to be adapted if ChatMessage.tsx handles its own download from blobUrl
+    // For now, it assumes the ChatMessage will trigger the download if a downloadableFile is present.
+    // If we need a direct download from here (e.g., for non-interactive scenarios), this would need logic.
     const conversation = conversations.find(c => c.id === activeConversationId);
     const message = conversation?.messages.find(m => m.id === messageId && m.sender === 'ai');
-    if (message) {
+    
+    if (message?.downloadableFile?.blobUrl) {
+        // ChatMessage component handles this via its own button and the blobUrl
+        toast({title: "Info", description: "Use the download button on the message."});
+    } else if (message?.text) { // Fallback for downloading raw text if no downloadableFile
       const blob = new Blob([message.text], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -607,22 +733,22 @@ export default function ChatPage() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } else {
-      toast({ title: "Error", description: "Could not find message to download.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not find message or file to download.", variant: "destructive" });
     }
   };
 
 const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     if (!activeConversationId) return;
 
+    const currentConvId = activeConversationId;
     let promptingUserMessage: Message | undefined;
     let baseMessagesForRegen: Message[] = [];
-    let currentConversationForRegen: Conversation | undefined;
 
     setConversations(prevConvs => {
-        const convIndex = prevConvs.findIndex(c => c.id === activeConversationId);
+        const convIndex = prevConvs.findIndex(c => c.id === currentConvId);
         if (convIndex === -1) return prevConvs;
 
-        currentConversationForRegen = prevConvs[convIndex];
+        const currentConversationForRegen = prevConvs[convIndex];
         const aiMessageIndex = currentConversationForRegen.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
 
         if (aiMessageIndex <= 0) { 
@@ -630,15 +756,16 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             return prevConvs;
         }
         
-        const userMsg = currentConversationForRegen.messages[aiMessageIndex - 1];
-        if (userMsg.sender !== 'user') {
+        promptingUserMessage = currentConversationForRegen.messages[aiMessageIndex - 1];
+        if (promptingUserMessage.sender !== 'user') {
             toast({ title: "Error", description: "Cannot regenerate. Preceding message is not from user.", variant: "destructive" });
             return prevConvs;
         }
         
-        promptingUserMessage = userMsg; 
-        // Truncate messages to *include* the user prompt, removing the old AI response and subsequent messages.
-        baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex); 
+        baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex -1); 
+        // Add back the prompting user message to baseMessagesForRegen
+        baseMessagesForRegen.push(promptingUserMessage);
+
 
         const updatedConvs = [...prevConvs];
         updatedConvs[convIndex] = {
@@ -649,10 +776,9 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         return updatedConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
     
-    // Allow state to update before proceeding
     await new Promise(resolve => setTimeout(resolve, 0)); 
     
-    if (!promptingUserMessage || !currentConversationId) { // Check currentConversationId again as it might have changed contextually
+    if (!promptingUserMessage || !currentConvId) {
         console.error("Regeneration failed: prompting user message or active conversation ID not captured correctly.");
         setIsLoading(false);
         return;
@@ -662,8 +788,6 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     toast({ title: "Regenerating AI response..." });
     
     let queryTextForBackend = promptingUserMessage.text;
-    // For regeneration, we assume the file context is part of the text (e.g., "[File Attached: name.xlsx]")
-    // We don't re-upload the file itself during regeneration, backend relies on text.
     if (promptingUserMessage.file) {
         queryTextForBackend = `[File Attached: ${promptingUserMessage.file.name}] ${promptingUserMessage.text}`.trim();
         if (!promptingUserMessage.text.trim() && promptingUserMessage.file) { 
@@ -672,7 +796,6 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     }
 
     try {
-        // Regeneration always sends JSON, as it doesn't involve re-uploading the file itself
         const backendResponse = await fetch('http://localhost:5000/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -686,45 +809,57 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         
         const contentType = backendResponse.headers.get("content-type");
         let aiResponseText = "";
+        let downloadableFile: Message['downloadableFile'] | undefined = undefined;
 
-        if (contentType && contentType.includes("application/json")) {
-            const jsonResponse = await backendResponse.json();
-            if (jsonResponse.error) {
-                throw new Error(jsonResponse.error);
+
+        if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
+            const blob = await backendResponse.blob();
+            const contentDisposition = backendResponse.headers.get('Content-Disposition');
+            let filename = "downloaded_file";
+            if (contentType.includes("spreadsheetml.sheet")) filename += ".xlsx";
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+                if (filenameMatch && filenameMatch.length > 1) filename = filenameMatch[1];
             }
+            const blobUrl = URL.createObjectURL(blob);
+            downloadableFile = { name: filename, type: blob.type, blobUrl };
+            aiResponseText = `File '${filename}' is ready for download.`;
+            toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.`});
+        } else if (contentType && contentType.includes("application/json")) {
+            const jsonResponse = await backendResponse.json();
+            if (jsonResponse.error) throw new Error(jsonResponse.error);
             aiResponseText = jsonResponse.response || "Received an empty response.";
         } else {
-             // Handle unexpected non-JSON response during regeneration
-            aiResponseText = await backendResponse.text() || "Received non-JSON response during regeneration.";
-            toast({ title: "Warning", description: "Received non-JSON response during regeneration. Displaying as text.", variant: "default" });
+            aiResponseText = await backendResponse.text() || "Received an unexpected response type.";
         }
 
         let processedResponseText = aiResponseText;
-        if (selectedModel === 'deepseek-r1') { 
+        if (selectedModel === 'deepseek-r1' && !downloadableFile) { 
             processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         }
 
         const newAiMessageId = (Date.now() + 1).toString(); 
-        const newAiMessagePlaceholder: Message = { // Renamed to avoid conflict
+        const newAiMessagePlaceholder: Message = {
             id: newAiMessageId,
             text: '', 
             sender: 'ai',
             timestamp: Date.now(),
             modelUsed: selectedModel, 
+            downloadableFile: downloadableFile,
         };
         
-        // Add the new AI message placeholder to the already truncated message list
         setConversations(prevConvs =>
             prevConvs.map(conv => {
-                if (conv.id === activeConversationId) { // Use activeConversationId which should be set
+                if (conv.id === currentConvId) {
+                    // Append the new AI message to the already truncated list
                     return { ...conv, messages: [...baseMessagesForRegen, newAiMessagePlaceholder], timestamp: Date.now() };
                 }
                 return conv;
             })
         );
         
-        if (activeConversationId) {
-          streamResponseText(processedResponseText, newAiMessageId, activeConversationId);
+        if (currentConvId) {
+          streamResponseText(processedResponseText, newAiMessageId, currentConvId);
         } else {
              console.error("Error: No active conversation ID to stream regenerated response to.");
              setIsLoading(false);
@@ -746,8 +881,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         };
         setConversations(prevConvs =>
             prevConvs.map(conv => {
-                 if (conv.id === activeConversationId) { // Use activeConversationId
-                    // Add error message to the already truncated list
+                 if (conv.id === currentConvId) {
                     return { ...conv, messages: [...baseMessagesForRegen, errorAiMessage], timestamp: Date.now() };
                 }
                 return conv;
@@ -798,6 +932,12 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
       description: "Are you sure you want to delete this entire conversation? This action cannot be undone.",
       onConfirm: () => {
         setConversations(prevConversations => {
+            const convToDelete = prevConversations.find(c => c.id === conversationId);
+            convToDelete?.messages.forEach(msg => {
+                if (msg.downloadableFile?.blobUrl) {
+                    URL.revokeObjectURL(msg.downloadableFile.blobUrl);
+                }
+            });
             const newConversations = prevConversations.filter(conv => conv.id !== conversationId);
             if (activeConversationId === conversationId) {
                 if (newConversations.length > 0) {
@@ -822,6 +962,13 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
       title: "Delete All Chats?",
       description: "Are you sure you want to delete all your conversations? This action cannot be undone and will clear all chat history.",
       onConfirm: () => {
+        conversations.forEach(conv => {
+            conv.messages.forEach(msg => {
+                if (msg.downloadableFile?.blobUrl) {
+                    URL.revokeObjectURL(msg.downloadableFile.blobUrl);
+                }
+            });
+        });
         setConversations([]); 
         setActiveConversationId(null); 
         toast({ title: "All conversations deleted" });
@@ -1072,7 +1219,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
                     onDeleteMessage={handleDeleteMessage}
                     onCopyUserMessage={handleCopyUserMessage}
                     onCopyAIMessage={handleCopyAIMessage}
-                    onDownloadAIMessage={handleDownloadAIMessage}
+                    onDownloadAIMessage={handleDownloadAIMessage} // Kept for text download fallback
                     onRegenerateAIMessage={handleRegenerateAIMessage}
                     onLikeAIMessage={handleLikeAIMessage}
                     onDislikeAIMessage={handleDislikeAIMessage}
@@ -1116,5 +1263,3 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     </SidebarProvider>
   );
 }
-
-    

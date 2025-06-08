@@ -17,7 +17,7 @@ interface ChatMessageProps {
   onDelete: () => void;
   onCopyUserMessage: (text: string) => void;
   onCopyAIMessage: (text: string) => void;
-  onDownloadAIMessage: () => void;
+  onDownloadAIMessage: () => void; // Kept for potential direct text download, file download handled by new button
   onRegenerateAIMessage: () => void;
   onLikeAIMessage: () => void;
   onDislikeAIMessage: () => void;
@@ -59,7 +59,7 @@ export function ChatMessage({
   onDelete,
   onCopyUserMessage,
   onCopyAIMessage,
-  onDownloadAIMessage,
+  onDownloadAIMessage, // This can be used for text fallback if needed
   onRegenerateAIMessage,
   onLikeAIMessage,
   onDislikeAIMessage,
@@ -96,6 +96,19 @@ export function ChatMessage({
       </Tooltip>
     </TooltipProvider>
   );
+
+  const handleDownloadFile = () => {
+    if (message.downloadableFile?.blobUrl && message.downloadableFile?.name) {
+      const link = document.createElement('a');
+      link.href = message.downloadableFile.blobUrl;
+      link.download = message.downloadableFile.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      // Note: We are not revoking the object URL here to allow multiple downloads
+      // or if the user cancels and retries. Browser will clean up on page unload.
+    }
+  };
 
   return (
     <div
@@ -157,6 +170,24 @@ export function ChatMessage({
             </div>
           )}
 
+          {message.downloadableFile && !isUser && (
+            <div className="px-3 pb-2 pt-1">
+               <hr className={cn(
+                "mb-2 border-t", 
+                 "border-card-foreground/20"
+              )} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadFile}
+                className="w-full text-card-foreground hover:bg-accent/80"
+              >
+                <Download size={14} className="mr-2" />
+                Download {message.downloadableFile.name}
+              </Button>
+            </div>
+          )}
+
           {(message.timestamp || (!isUser && modelUsedLabel)) && (
             <div className="flex items-center self-end px-3 pb-1.5 pt-0 text-[11px] leading-tight opacity-80">
               {!isUser && modelUsedLabel && (
@@ -179,17 +210,23 @@ export function ChatMessage({
               <ActionButton onClick={onDelete} icon={Trash2} tooltipText="Delete" className="hover:text-destructive text-destructive/80" />
             </>
           )}
-          {!isUser && message.text.trim() !== '' && (
+          {!isUser && message.text.trim() !== '' && !message.downloadableFile && ( // Show these only if it's primarily a text response
             <>
               <ActionButton onClick={() => onCopyAIMessage(message.text)} icon={Copy} tooltipText="Copy" />
-              <ActionButton onClick={onDownloadAIMessage} icon={Download} tooltipText="Download" />
+              <ActionButton onClick={onDownloadAIMessage} icon={Download} tooltipText="Download Text" />
               <ActionButton onClick={onRegenerateAIMessage} icon={RefreshCw} tooltipText="Regenerate" />
               <ActionButton onClick={onLikeAIMessage} icon={ThumbsUp} tooltipText="Like" />
               <ActionButton onClick={onDislikeAIMessage} icon={ThumbsDown} tooltipText="Dislike" />
             </>
           )}
-           {!isUser && message.file && message.text.trim() === '' && ( // Show download if only file from AI
-             <ActionButton onClick={onDownloadAIMessage} icon={Download} tooltipText="Download File" />
+           {!isUser && message.downloadableFile && ( // Specific actions for downloadable file messages
+             <>
+                <ActionButton onClick={() => onCopyAIMessage(message.text)} icon={Copy} tooltipText="Copy Info Text" /> 
+                {/* Download button is now part of the message body */}
+                <ActionButton onClick={onRegenerateAIMessage} icon={RefreshCw} tooltipText="Regenerate" />
+                <ActionButton onClick={onLikeAIMessage} icon={ThumbsUp} tooltipText="Like" />
+                <ActionButton onClick={onDislikeAIMessage} icon={ThumbsDown} tooltipText="Dislike" />
+             </>
            )}
         </div>
       </div>

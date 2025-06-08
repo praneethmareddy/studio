@@ -6,10 +6,15 @@ export interface Message {
   timestamp: number; // Store as number (Date.now()) for easier serialization
   avatar?: string; // Optional: URL or identifier for avatar
   modelUsed?: string; // Optional: Identifier for the AI model used (e.g., 'llama3', 'deepseek-r1')
-  file?: { // To store basic info about an attached file
+  file?: { // For user-uploaded files or files mentioned by AI
     name: string;
     type: string;
     size: number;
+  };
+  downloadableFile?: { // For files AI provides FOR download
+    name: string;
+    type: string;
+    blobUrl: string; // Object URL created from the blob
   };
 }
 
