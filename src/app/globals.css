@@ -130,6 +130,9 @@
   .animate-robot-bob {
     animation: robot-bob 1.5s ease-in-out infinite;
   }
+  .animate-dot-pulse {
+    animation: dot-pulse 1.5s infinite ease-in-out;
+  }
 }
 
 @keyframes float {
@@ -160,3 +163,9 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-3px); }
 }
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+

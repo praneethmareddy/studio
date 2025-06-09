@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Search, Paperclip, Loader2, FileText, RefreshCw, ThumbsUp, ThumbsDown, Copy, Download } from 'lucide-react';
+import { SquarePen, MessageSquare, MoreHorizontal, Pencil, Trash2, Save, X, PanelLeft, ArrowUp, User, Cpu, Brain, Search, Paperclip, FileText, RefreshCw, ThumbsUp, ThumbsDown, Copy, Download } from 'lucide-react';
 import Image from 'next/image';
 import { ThemeToggleButton } from '@/components/theme-toggle-button';
 import {
@@ -55,7 +55,7 @@ import { cn } from '@/lib/utils';
 import { isToday, isYesterday, differenceInDays, format } from 'date-fns';
 
 const CONVERSATIONS_STORAGE_KEY = 'genAiConfigGeneratorConversations';
-const STREAM_DELAY_MS = 50;
+const STREAM_DELAY_MS = 30; // Adjusted for character-by-character streaming feel
 
 const sampleQueriesList = [
   "give me telus ciq",
@@ -191,10 +191,13 @@ export default function ChatPage() {
   }, [conversations, toast]);
 
   useEffect(() => {
+    // This effect handles changes in activeConversationId validity when conversations list changes
     if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
+      // Active ID is no longer valid (e.g., chat deleted), select most recent or null
       const mostRecent = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
       setActiveConversationId(mostRecent ? mostRecent.id : null);
     } else if (conversations.length === 0 && activeConversationId !== null) { 
+      // All conversations deleted, active ID should be null
       setActiveConversationId(null);
     }
   }, [conversations, activeConversationId]);
@@ -205,8 +208,6 @@ export default function ChatPage() {
       if (streamTimeoutRef.current) {
         clearTimeout(streamTimeoutRef.current);
       }
-      // Clean up any object URLs when the component unmounts
-      // This is a broad cleanup; more specific cleanup might be needed if URLs are managed differently
       conversations.forEach(conv => {
         conv.messages.forEach(msg => {
           if (msg.downloadableFile?.blobUrl) {
@@ -216,7 +217,7 @@ export default function ChatPage() {
       });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations]); // Add conversations to dependency array for cleanup
+  }, [conversations]); 
 
   const activeConversation = useMemo(() => {
     return conversations.find(conv => conv.id === activeConversationId);
@@ -296,12 +297,11 @@ export default function ChatPage() {
 
   const streamResponseText = useCallback((fullText: string, messageId: string, conversationId: string) => {
     let currentDisplayedText = '';
-    const parts = fullText.split(/(\s+)/); 
-    let partIndex = 0;
+    let charIndex = 0;
 
-    const appendNextPart = () => {
-      if (partIndex < parts.length) {
-        currentDisplayedText += parts[partIndex];
+    const appendNextCharacter = () => {
+      if (charIndex < fullText.length) {
+        currentDisplayedText += fullText[charIndex];
         setConversations(prevConvs =>
           prevConvs.map(conv => {
             if (conv.id === conversationId) {
@@ -316,8 +316,8 @@ export default function ChatPage() {
             return conv;
           })
         );
-        partIndex++;
-        streamTimeoutRef.current = setTimeout(appendNextPart, STREAM_DELAY_MS);
+        charIndex++;
+        streamTimeoutRef.current = setTimeout(appendNextCharacter, STREAM_DELAY_MS);
       } else {
         setIsLoading(false);
         setConversations(prevConvs =>
@@ -327,7 +327,7 @@ export default function ChatPage() {
         );
       }
     };
-    appendNextPart();
+    appendNextCharacter();
   }, []);
 
  const handleSendMessage = useCallback(async (
@@ -509,62 +509,63 @@ export default function ChatPage() {
       return;
     }
 
-    const currentConvId = activeConversationId; // Capture for stable use in async flow
+    const currentConvId = activeConversationId; 
 
-    // Prepare the text content for the backend, including file marker if original message had a file
     let textForBackend = trimmedEditingText;
     if (editingMessage.file) {
       textForBackend = `[File Attached: ${editingMessage.file.name}] ${trimmedEditingText}`.trim();
-      // If user cleared the text but file was originally present
       if (!trimmedEditingText) {
         textForBackend = `File: ${editingMessage.file.name}`;
       }
     }
-     // Final fallback if text is empty but file exists
     if (!textForBackend && editingMessage.file) {
         textForBackend = `File: ${editingMessage.file.name}`;
     }
 
+    let updatedUserMessage: Message | null = null;
+    let baseMessagesForNewAIResponse: Message[] = [];
 
-    let updatedUserMessageWithOriginalId: Message | null = null;
+    setConversations(prevConvs => {
+      const convIndex = prevConvs.findIndex(conv => conv.id === currentConvId);
+      if (convIndex === -1) return prevConvs;
 
-    // Update the user message in place and remove subsequent messages
-    setConversations(prevConvs =>
-      prevConvs.map(conv => {
-        if (conv.id === currentConvId) {
-          const messageIndex = conv.messages.findIndex(msg => msg.id === editingMessage.id);
-          if (messageIndex === -1) return conv;
+      const targetConversation = prevConvs[convIndex];
+      const messageIndex = targetConversation.messages.findIndex(msg => msg.id === editingMessage.id);
+      if (messageIndex === -1) return prevConvs;
 
-          // Create the updated user message, keeping original ID but updating text and timestamp
-          updatedUserMessageWithOriginalId = {
-            ...conv.messages[messageIndex], // Spread original message to keep file, sender etc.
-            text: trimmedEditingText, // User's edited text for display
-            timestamp: Date.now(), // Update timestamp of the user's edited message
-          };
+      updatedUserMessage = {
+        ...targetConversation.messages[messageIndex],
+        text: trimmedEditingText, // Display text
+        timestamp: Date.now(),
+      };
 
-          return {
-            ...conv,
-            // Replace messages from the edited one onwards with just the updated user message
-            messages: [...conv.messages.slice(0, messageIndex), updatedUserMessageWithOriginalId],
-            timestamp: Date.now(), // Update conversation timestamp
-          };
-        }
-        return conv;
-      }).sort((a, b) => b.timestamp - a.timestamp)
-    );
+      baseMessagesForNewAIResponse = [
+        ...targetConversation.messages.slice(0, messageIndex),
+        updatedUserMessage,
+      ];
+      
+      const updatedConv = {
+        ...targetConversation,
+        messages: baseMessagesForNewAIResponse,
+        timestamp: Date.now(),
+      };
+      
+      const newConvs = [...prevConvs];
+      newConvs[convIndex] = updatedConv;
+      return newConvs.sort((a, b) => b.timestamp - a.timestamp);
+    });
+    
+    await new Promise(resolve => setTimeout(resolve, 0)); // Ensure state update before proceeding
 
-    // Reset editing state
     setEditingMessage(null);
     setEditingMessageText('');
     setIsLoading(true);
     toast({ title: "Resending edited message..." });
 
-    // Now, fetch a new AI response based on this `textForBackend`
     try {
       const backendResponse = await fetch('http://localhost:5000/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // For edits/resends, we don't re-upload the file itself, backend relies on text marker.
         body: JSON.stringify({ query: textForBackend, model: selectedModel }),
       });
 
@@ -606,7 +607,7 @@ export default function ChatPage() {
       const newAiMessageId = (Date.now() + 1).toString();
       const aiMessagePlaceholder: Message = {
         id: newAiMessageId,
-        text: '', // Start with empty, will be filled by streaming
+        text: '', 
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
@@ -614,11 +615,13 @@ export default function ChatPage() {
       };
 
       setConversations(prevConvs =>
-        prevConvs.map(conv =>
-          conv.id === currentConvId
-            ? { ...conv, messages: [...conv.messages, aiMessagePlaceholder], timestamp: Date.now() }
-            : conv
-        )
+        prevConvs.map(conv => {
+            if (conv.id === currentConvId) {
+                // baseMessagesForNewAIResponse already contains the edited user message
+                return { ...conv, messages: [...baseMessagesForNewAIResponse, aiMessagePlaceholder], timestamp: Date.now() };
+            }
+            return conv;
+        })
       );
       
       if (currentConvId) {
@@ -642,11 +645,12 @@ export default function ChatPage() {
         modelUsed: selectedModel,
       };
       setConversations(prevConvs =>
-        prevConvs.map(conv =>
-          conv.id === currentConvId
-            ? { ...conv, messages: [...conv.messages, errorAiMessage], timestamp: Date.now() }
-            : conv
-        )
+        prevConvs.map(conv => {
+             if (conv.id === currentConvId) {
+                return { ...conv, messages: [...baseMessagesForNewAIResponse, errorAiMessage], timestamp: Date.now() };
+            }
+            return conv;
+        })
       );
       setIsLoading(false);
     }
@@ -670,7 +674,6 @@ export default function ChatPage() {
             const messageIndex = conv.messages.findIndex(msg => msg.id === messageId);
             if (messageIndex !== -1) {
               const updatedMessages = conv.messages.slice(0, messageIndex);
-              // If deleting the message results in an empty conversation, mark for removal or handle title
               return {
                 ...conv,
                 messages: updatedMessages,
@@ -680,10 +683,6 @@ export default function ChatPage() {
           }
           return conv;
         }).filter(conv => { 
-            // Optional: remove conversation if it becomes empty after deletion
-            // if (conv.id === activeConversationId && conv.messages.length === 0) {
-            //   return false; // This would delete the conversation
-            // }
             return true; 
          })
          .sort((a,b) => b.timestamp - a.timestamp)
@@ -713,16 +712,12 @@ export default function ChatPage() {
   };
 
   const handleDownloadAIMessage = (messageId: string) => {
-    // This function might need to be adapted if ChatMessage.tsx handles its own download from blobUrl
-    // For now, it assumes the ChatMessage will trigger the download if a downloadableFile is present.
-    // If we need a direct download from here (e.g., for non-interactive scenarios), this would need logic.
     const conversation = conversations.find(c => c.id === activeConversationId);
     const message = conversation?.messages.find(m => m.id === messageId && m.sender === 'ai');
     
     if (message?.downloadableFile?.blobUrl) {
-        // ChatMessage component handles this via its own button and the blobUrl
         toast({title: "Info", description: "Use the download button on the message."});
-    } else if (message?.text) { // Fallback for downloading raw text if no downloadableFile
+    } else if (message?.text) { 
       const blob = new Blob([message.text], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -763,7 +758,6 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         }
         
         baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex -1); 
-        // Add back the prompting user message to baseMessagesForRegen
         baseMessagesForRegen.push(promptingUserMessage);
 
 
@@ -779,7 +773,6 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     await new Promise(resolve => setTimeout(resolve, 0)); 
     
     if (!promptingUserMessage || !currentConvId) {
-        console.error("Regeneration failed: prompting user message or active conversation ID not captured correctly.");
         setIsLoading(false);
         return;
     }
@@ -851,7 +844,6 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === currentConvId) {
-                    // Append the new AI message to the already truncated list
                     return { ...conv, messages: [...baseMessagesForRegen, newAiMessagePlaceholder], timestamp: Date.now() };
                 }
                 return conv;
@@ -1219,12 +1211,13 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
                     onDeleteMessage={handleDeleteMessage}
                     onCopyUserMessage={handleCopyUserMessage}
                     onCopyAIMessage={handleCopyAIMessage}
-                    onDownloadAIMessage={handleDownloadAIMessage} // Kept for text download fallback
+                    onDownloadAIMessage={handleDownloadAIMessage}
                     onRegenerateAIMessage={handleRegenerateAIMessage}
                     onLikeAIMessage={handleLikeAIMessage}
                     onDislikeAIMessage={handleDislikeAIMessage}
                     activeConversationId={activeConversationId}
                     isLoading={isLoading}
+                    selectedModel={selectedModel}
                  />
               )}
           </main>
@@ -1263,3 +1256,4 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     </SidebarProvider>
   );
 }
+

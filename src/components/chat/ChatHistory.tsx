@@ -5,7 +5,8 @@ import type { Message } from '@/lib/types';
 import { ChatMessage } from './ChatMessage';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import React, { useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react'; 
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Bot, Cpu, Brain } from 'lucide-react'; 
 import { cn } from '@/lib/utils';
 
 interface ChatHistoryProps {
@@ -20,6 +21,7 @@ interface ChatHistoryProps {
   onDislikeAIMessage: (messageId: string) => void;
   activeConversationId: string | null;
   isLoading?: boolean;
+  selectedModel: string;
 }
 
 export function ChatHistory({ 
@@ -33,7 +35,8 @@ export function ChatHistory({
   onLikeAIMessage,
   onDislikeAIMessage,
   activeConversationId, 
-  isLoading 
+  isLoading,
+  selectedModel
 }: ChatHistoryProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -70,7 +73,7 @@ export function ChatHistory({
             onEdit={() => onEditMessage(msg)}
             onDelete={() => onDeleteMessage(msg.id)}
             onCopyUserMessage={onCopyUserMessage}
-            onCopyAIMessage={(text) => onCopyAIMessage(text)} // AI copy might be specific to message text
+            onCopyAIMessage={(text) => onCopyAIMessage(text)} 
             onDownloadAIMessage={() => onDownloadAIMessage(msg.id)}
             onRegenerateAIMessage={() => onRegenerateAIMessage(msg.id)}
             onLikeAIMessage={() => onLikeAIMessage(msg.id)}
@@ -84,11 +87,18 @@ export function ChatHistory({
           </div>
         )}
         {isLoading && messages.length > 0 && messages[messages.length-1].sender === 'user' && (
-          <div className="flex justify-start items-center p-2">
-            <div className={cn('group/message flex items-start gap-3 my-2 justify-start')}>
-              <div className="max-w-[70%] rounded-lg p-3 shadow-md bg-card text-card-foreground rounded-bl-none animate-pulse">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
+          <div className={cn('group/message flex items-start gap-3 my-2 justify-start pl-2 py-1')}>
+             <Avatar className="h-8 w-8 flex-shrink-0 self-center">
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {selectedModel === 'llama3' && <Cpu size={20} />}
+                {selectedModel === 'deepseek-r1' && <Brain size={20} />}
+                {(!selectedModel || (selectedModel !== 'llama3' && selectedModel !== 'deepseek-r1')) && <Bot size={20} />}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex items-center space-x-1 bg-card text-card-foreground p-3 rounded-lg shadow-md rounded-bl-none">
+              <span className="h-2 w-2 bg-current rounded-full animate-dot-pulse [animation-delay:-0.3s]"></span>
+              <span className="h-2 w-2 bg-current rounded-full animate-dot-pulse [animation-delay:-0.15s]"></span>
+              <span className="h-2 w-2 bg-current rounded-full animate-dot-pulse"></span>
             </div>
           </div>
         )}
@@ -96,3 +106,4 @@ export function ChatHistory({
     </ScrollArea>
   );
 }
+
