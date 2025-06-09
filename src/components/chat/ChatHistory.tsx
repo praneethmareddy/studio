@@ -19,6 +19,7 @@ interface ChatHistoryProps {
   onRegenerateAIMessage: (messageId: string) => void;
   onLikeAIMessage: (messageId: string) => void;
   onDislikeAIMessage: (messageId: string) => void;
+  onConfirmStandardization: (messageId: string, requestId: string, decision: 'yes' | 'no') => void;
   activeConversationId: string | null;
   isLoading?: boolean;
   selectedModel: string;
@@ -34,6 +35,7 @@ export function ChatHistory({
   onRegenerateAIMessage,
   onLikeAIMessage,
   onDislikeAIMessage,
+  onConfirmStandardization,
   activeConversationId, 
   isLoading,
   selectedModel
@@ -78,6 +80,7 @@ export function ChatHistory({
             onRegenerateAIMessage={() => onRegenerateAIMessage(msg.id)}
             onLikeAIMessage={() => onLikeAIMessage(msg.id)}
             onDislikeAIMessage={() => onDislikeAIMessage(msg.id)}
+            onConfirmStandardization={onConfirmStandardization}
           />
         ))}
         <div ref={messagesEndRef} />
@@ -106,4 +109,3 @@ export function ChatHistory({
     </ScrollArea>
   );
 }
-

@@ -16,6 +16,12 @@ export interface Message {
     type: string;
     blobUrl: string; // Object URL created from the blob
   };
+  // Fields for CIQ Standardization Workflow
+  isStandardizationRequest?: boolean;
+  standardizationRequestId?: string;
+  unmatchedColumns?: string[];
+  similarityMapping?: Record<string, string>;
+  isStandardizationConfirmed?: boolean; // To track if user has responded to the confirmation
 }
 
 export interface Conversation {
