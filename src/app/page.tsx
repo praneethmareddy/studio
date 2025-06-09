@@ -202,13 +202,19 @@ export default function ChatPage() {
   }, [conversations, toast]);
 
   useEffect(() => {
-    if (!activeConversationId && conversations.length > 0) {
+    // This effect ensures activeConversationId remains valid or sensible
+    // if it's null and there are conversations, pick the most recent
+    if (activeConversationId === null && conversations.length > 0) {
         const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
         setActiveConversationId(mostRecent.id);
-    } else if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
+    } 
+    // if activeConversationId exists but the conversation itself was deleted
+    else if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
         const mostRecentAfterDeletion = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
         setActiveConversationId(mostRecentAfterDeletion ? mostRecentAfterDeletion.id : null);
-    } else if (conversations.length === 0 && activeConversationId !== null) {
+    }
+    // if conversations are empty, activeId should be null
+    else if (conversations.length === 0 && activeConversationId !== null) {
         setActiveConversationId(null);
     }
   }, [conversations, activeConversationId]);
@@ -343,28 +349,30 @@ export default function ChatPage() {
 
  const handleSendMessage = useCallback(async (
     text: string, 
-    file?: File
+    file?: File // This is the newly attached file from ChatInput
   ) => {
     const trimmedText = text.trim();
     if (!trimmedText && !file) return;
 
     let displayMessageText = trimmedText;
-    let fileInfo: Message['file'] | undefined = undefined;
+    let fileInfoForUserMessage: Message['file'] | undefined = undefined;
     let messageTextForBackend = trimmedText;
 
     if (file) { 
-        fileInfo = { name: file.name, type: file.type, size: file.size };
+        fileInfoForUserMessage = { name: file.name, type: file.type, size: file.size };
         if (trimmedText.toLowerCase().includes("standardize this ciq") || trimmedText.toLowerCase().includes("standardize ciq")) {
-            messageTextForBackend = "standardize this CIQ";
+            messageTextForBackend = "standardize this CIQ"; // Standard query for backend
             displayMessageText = `Standardizing: ${file.name}`; 
         } else {
+            // For general file uploads, backend might expect textual reference or just use the file with query
             messageTextForBackend = `[File Attached: ${file.name}] ${trimmedText}`.trim();
         }
     }
     
-    if (!trimmedText && fileInfo && !messageTextForBackend.toLowerCase().includes("standardize this ciq")) { 
-      displayMessageText = `File: ${fileInfo.name}`;
-      messageTextForBackend = `File: ${fileInfo.name}`;
+    if (!trimmedText && fileInfoForUserMessage && !messageTextForBackend.toLowerCase().includes("standardize this ciq")) { 
+      // If only a file is attached without text (and not for standardization)
+      displayMessageText = `File: ${fileInfoForUserMessage.name}`;
+      messageTextForBackend = `File: ${fileInfoForUserMessage.name}`;
     }
 
     const newUserMessage: Message = {
@@ -372,7 +380,7 @@ export default function ChatPage() {
       text: displayMessageText,
       sender: 'user',
       timestamp: Date.now(),
-      file: fileInfo,
+      file: fileInfoForUserMessage, // Store metadata of the *newly uploaded* file
     };
 
     setIsLoading(true);
@@ -382,7 +390,7 @@ export default function ChatPage() {
     if (!currentConversationId) {
       const newConversation: Conversation = {
         id: Date.now().toString(),
-        title: (displayMessageText || fileInfo?.name || "New Chat").substring(0, 20) + ((displayMessageText || fileInfo?.name || "New Chat").length > 20 ? '...' : ''),
+        title: (displayMessageText || fileInfoForUserMessage?.name || "New Chat").substring(0, 20) + ((displayMessageText || fileInfoForUserMessage?.name || "New Chat").length > 20 ? '...' : ''),
         timestamp: Date.now(),
         messages: [newUserMessage],
       };
@@ -399,17 +407,18 @@ export default function ChatPage() {
     updatedConversations.sort((a, b) => b.timestamp - a.timestamp);
     setConversations(updatedConversations);
     setChatInputValue(''); 
-    setAttachedFile(null); 
+    setAttachedFile(null); // Clear the globally attached file from ChatInput
 
     try {
       let backendResponse;
       const requestOptions: RequestInit = { method: 'POST' };
 
-      if (file) {
+      if (file) { // If a file was *newly attached* for this message
         const formData = new FormData();
         formData.append('file', file, file.name);
-        formData.append('query', messageTextForBackend); 
+        formData.append('query', messageTextForBackend); // Use the prepared query
         requestOptions.body = formData;
+        // No 'Content-Type' header for FormData, browser sets it
       } else { 
         requestOptions.headers = { 'Content-Type': 'application/json' };
         requestOptions.body = JSON.stringify({ query: messageTextForBackend, model: selectedModel });
@@ -445,34 +454,35 @@ export default function ChatPage() {
 
             const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             const blobUrl = URL.createObjectURL(blob);
-            const filename = jsonResponse.filename || "standardized_ciq.xlsx"; // Use filename from backend if provided
+            const filename = jsonResponse.filename || "standardized_ciq.xlsx"; 
             downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
             
             aiResponseText = `Standardized CIQ '${filename}' is ready for download.`;
             if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
-                aiResponseText += `\n\nSome columns were not found in the standard template.`;
+                aiResponseText += `\n\nSome columns were not found in the standard template. You'll be asked if you want to update the template.`;
+            } else {
+                aiResponseText += `\n\nAll columns matched the standard template.`;
             }
             toast({ title: "Standardization Complete", description: `'${filename}' is ready.` });
         } else if (jsonResponse.request_id || jsonResponse.unmatched_columns || jsonResponse.standardized_file_base64) {
-            // Incomplete standardization response
             let debugMessage = "Standardization response from backend is incomplete. ";
             if (!jsonResponse.standardized_file_base64) debugMessage += "Missing 'standardized_file_base64'. ";
             if (!jsonResponse.request_id) debugMessage += "Missing 'request_id'. ";
             if (!jsonResponse.response && !jsonResponse.standardized_file_base64) debugMessage += "Also missing 'response' field for a fallback message.";
             console.warn("Incomplete standardization JSON from backend:", jsonResponse);
             aiResponseText = jsonResponse.response || debugMessage.trim();
-            // Potentially still set standardization flags if some parts are present
             if (jsonResponse.request_id) {
-              isStandardizationReqLocal = true; // Mark as standardization attempt even if incomplete
+              isStandardizationReqLocal = true; 
               standardizationReqIdLocal = jsonResponse.request_id;
               unmatchedColsLocal = jsonResponse.unmatched_columns;
               simMappingLocal = jsonResponse.similarity_mapping;
             }
         }
-        else {
+        else { // Regular text response
             aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
       } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
+        // This case handles direct file downloads not part of standardization JSON (e.g., backend directly sends file)
         const blob = await backendResponse.blob();
         const contentDisposition = backendResponse.headers.get('Content-Disposition');
         let filename = "downloaded_file"; 
@@ -511,7 +521,7 @@ export default function ChatPage() {
         standardizationRequestId: standardizationReqIdLocal,
         unmatchedColumns: unmatchedColsLocal,
         similarityMapping: simMappingLocal,
-        isStandardizationConfirmed: false,
+        isStandardizationConfirmed: false, // Initially false for new requests
       };
 
       setConversations(prevConvs =>
@@ -557,15 +567,18 @@ export default function ChatPage() {
   const handleStartEditMessage = (message: Message) => {
     setEditingMessage(message);
     setEditingMessageText(message.text);
-    setAttachedFile(null); 
+    setAttachedFile(null); // Clear any globally attached file when starting an edit
   };
 
  const handleSaveEditedMessage = async () => {
     if (!editingMessage || !activeConversationId) return;
 
     const trimmedEditingText = editingMessageText.trim();
-    if (!trimmedEditingText && !editingMessage.file) {
-      toast({ title: "Cannot send empty message", variant: "destructive" });
+    // An edited message must have text, even if the original only had a file.
+    // If the original had a file and user clears text, they should probably delete or send new.
+    // For simplicity, we'll require some text on edit if the goal is to get a new AI response.
+    if (!trimmedEditingText) { 
+      toast({ title: "Cannot resend empty message", description: "Please provide some text for the edited message.", variant: "destructive" });
       return;
     }
 
@@ -574,23 +587,25 @@ export default function ChatPage() {
     let textForBackend = trimmedEditingText;
     let displayUserText = trimmedEditingText;
 
+    // If the ORIGINAL message being edited had a file, we include a reference to it in textForBackend
+    // The backend will treat this as a text query; it won't re-process the original file bytes unless a new file is attached.
     if (editingMessage.file) {
         if (trimmedEditingText.toLowerCase().includes("standardize this ciq") || trimmedEditingText.toLowerCase().includes("standardize ciq")) {
-            textForBackend = "standardize this CIQ";
-            displayUserText = `Standardizing: ${editingMessage.file.name}`;
+            textForBackend = "standardize this CIQ"; // Keep it simple for backend
+            // This will be a text-only request to backend. If backend requires a file for this query, it might error or ask for one.
+            // The current frontend sends this as JSON, so backend's `if 'file' in request.files` will be false.
+            // For true re-standardization of the *original* file on edit, user would need to re-attach, or backend needs more complex state.
+            displayUserText = `Standardizing (edited): ${editingMessage.file.name} - ${trimmedEditingText}`;
         } else {
-            textForBackend = `[File Attached: ${editingMessage.file.name}] ${trimmedEditingText}`.trim();
-            if (!trimmedEditingText) displayUserText = `File: ${editingMessage.file.name}`;
+            textForBackend = `[File Referenced: ${editingMessage.file.name}] ${trimmedEditingText}`.trim();
+            displayUserText = textForBackend; // Display what's sent
         }
     }
-    if (!textForBackend && editingMessage.file) {
-        textForBackend = `File: ${editingMessage.file.name}`;
-        if(!displayUserText) displayUserText = `File: ${editingMessage.file.name}`;
-    }
-
+    
     let updatedUserMessage: Message | null = null;
     let baseMessagesForNewAIResponse: Message[] = [];
 
+    // Update the user message in place and truncate subsequent messages
     setConversations(prevConvs => {
       const convIndex = prevConvs.findIndex(conv => conv.id === currentConvId);
       if (convIndex === -1) return prevConvs;
@@ -599,16 +614,18 @@ export default function ChatPage() {
       const messageIndex = targetConversation.messages.findIndex(msg => msg.id === editingMessage.id);
       if (messageIndex === -1) return prevConvs;
 
-      // Clean up blobUrl for the AI message that will be removed (if any)
-      if (targetConversation.messages[messageIndex + 1]?.downloadableFile?.blobUrl) {
-        URL.revokeObjectURL(targetConversation.messages[messageIndex + 1].downloadableFile.blobUrl);
+      // Clean up blobUrls for AI messages that will be removed
+      for (let i = messageIndex + 1; i < targetConversation.messages.length; i++) {
+        if (targetConversation.messages[i].downloadableFile?.blobUrl) {
+          URL.revokeObjectURL(targetConversation.messages[i].downloadableFile.blobUrl);
+        }
       }
 
       updatedUserMessage = {
         ...targetConversation.messages[messageIndex],
-        text: displayUserText, 
+        text: displayUserText, // Use the display text which might reference the file
         timestamp: Date.now(),
-        // Keep original file info if it existed, editingMessage.file should have it
+        // Keep original file info IF it existed. It's just metadata now for display.
         file: editingMessage.file 
       };
       
@@ -620,7 +637,7 @@ export default function ChatPage() {
       const updatedConv = {
         ...targetConversation,
         messages: baseMessagesForNewAIResponse, 
-        timestamp: Date.now(),
+        timestamp: Date.now(), // Update conversation timestamp
       };
       
       const newConvs = [...prevConvs];
@@ -628,50 +645,25 @@ export default function ChatPage() {
       return newConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
     
+    // Ensure state update has propagated before proceeding
     await new Promise(resolve => setTimeout(resolve, 0)); 
 
-    setEditingMessage(null);
+    setEditingMessage(null); // Clear editing state
     setEditingMessageText('');
     setIsLoading(true);
     toast({ title: "Resending edited message..." });
 
     try {
-      const requestOptions: RequestInit = { method: 'POST' };
-      // For editing, if the original message had a file, we need to signal this to the backend.
-      // The simplest way for this app's backend is to rely on `textForBackend`
-      // which includes "[File Attached: ...]" or "standardize this CIQ".
-      // Re-uploading the actual file bytes on edit is complex if not re-selected by user.
-      // The current backend's `/query` with FormData expects a file if `textForBackend` implies it.
-      // This example assumes that if `editingMessage.file` exists, the `textForBackend`
-      // is sufficient for the backend to understand the context of the original file.
-      // If the backend *must* receive file bytes again for every edit involving a file,
-      // this part of the frontend would need a way to re-access or re-upload the original file.
-      // For "standardize this CIQ", if `editingMessage.file` is present, we must send FormData.
-      if (textForBackend.toLowerCase().includes("standardize this ciq") && editingMessage.file) {
-          const formData = new FormData();
-          // This is tricky: we don't have the original File object easily available here for re-upload.
-          // The backend would need to handle this contextually or the user would need to re-attach.
-          // For a simplified re-send, we can try sending a dummy file if backend requires 'file' field
-          // when query is "standardize this CIQ". This assumes backend can link it to original context.
-          // THIS IS A SIMPLIFICATION AND MAY NOT WORK WITH ALL BACKEND IMPLEMENTATIONS.
-          // A more robust solution is to prevent editing of file content, or prompt re-upload.
-          const tempFile = new File(["dummy data to ensure formdata"], editingMessage.file.name, {type: editingMessage.file.type});
-          formData.append('file', tempFile, editingMessage.file.name);
-          formData.append('query', textForBackend); // "standardize this CIQ"
-          requestOptions.body = formData;
-      } else if (editingMessage.file) { // Other file-involved messages
-          const formData = new FormData();
-          // Similar issue as above for non-standardization file messages
-          const tempFile = new File(["dummy data"], editingMessage.file.name, {type: editingMessage.file.type});
-          formData.append('file', tempFile, editingMessage.file.name);
-          formData.append('query', textForBackend); // e.g. "[File Attached: name] text"
-          requestOptions.body = formData;
-      }
-      else {
-        requestOptions.headers = { 'Content-Type': 'application/json' };
-        requestOptions.body = JSON.stringify({ query: textForBackend, model: selectedModel });
-      }
-
+      // For edits, we always send a JSON request. The backend will not receive file bytes.
+      // If the 'textForBackend' implies a file operation (like "standardize this CIQ"),
+      // the backend needs to handle the absence of `request.files` gracefully.
+      const requestOptions: RequestInit = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: textForBackend, model: selectedModel }),
+      };
+      
+      console.log("Resending edited message with options:", requestOptions); // Debug log
 
       const backendResponse = await fetch('http://localhost:5000/query', requestOptions);
 
@@ -703,7 +695,9 @@ export default function ChatPage() {
             downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
             aiResponseText = `Standardized CIQ '${filename}' is ready for download.`;
             if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
-                aiResponseText += `\n\nSome columns were not found in the standard template.`;
+                aiResponseText += `\n\nSome columns were not found in the standard template. You'll be asked if you want to update.`;
+            } else {
+                 aiResponseText += `\n\nAll columns matched the standard template.`;
             }
             toast({ title: "Standardization Complete", description: "File is ready."});
         } else if (jsonResponse.request_id || jsonResponse.unmatched_columns || jsonResponse.standardized_file_base64) {
@@ -711,6 +705,7 @@ export default function ChatPage() {
             if (!jsonResponse.standardized_file_base64) debugMessage += "Missing 'standardized_file_base64'. ";
             if (!jsonResponse.request_id) debugMessage += "Missing 'request_id'. ";
             if (!jsonResponse.response && !jsonResponse.standardized_file_base64) debugMessage += "Also missing 'response' field for fallback.";
+            console.warn("Incomplete standardization JSON from backend (on edit):", jsonResponse);
             aiResponseText = jsonResponse.response || debugMessage.trim();
             if (jsonResponse.request_id) {
               isStandardizationReqLocal = true; 
@@ -719,10 +714,11 @@ export default function ChatPage() {
               simMappingLocal = jsonResponse.similarity_mapping;
             }
         }
-         else {
+         else { // Regular text response
             aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
       } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
+        // This path for edits is less likely if backend sends standardization via JSON, but kept for robustness
         const blob = await backendResponse.blob();
         const contentDisposition = backendResponse.headers.get('Content-Disposition');
         let filename = "downloaded_file";
@@ -756,12 +752,14 @@ export default function ChatPage() {
         standardizationRequestId: standardizationReqIdLocal,
         unmatchedColumns: unmatchedColsLocal,
         similarityMapping: simMappingLocal,
-        isStandardizationConfirmed: false,
+        isStandardizationConfirmed: false, // New AI response, confirmation reset
       };
 
+      // Append the new AI message to the (already truncated) conversation
       setConversations(prevConvs =>
         prevConvs.map(conv => {
             if (conv.id === currentConvId) {
+                // baseMessagesForNewAIResponse already contains the edited user message
                 return { ...conv, messages: [...baseMessagesForNewAIResponse, newAiMessage], timestamp: Date.now() };
             }
             return conv;
@@ -771,7 +769,7 @@ export default function ChatPage() {
       if (currentConvId) {
         streamResponseText(processedResponseText, newAiMessageId, currentConvId);
       } else {
-         setIsLoading(false);
+         setIsLoading(false); // Should not happen if currentConvId was valid before
       }
 
     } catch (error: any) {
@@ -788,6 +786,7 @@ export default function ChatPage() {
         timestamp: Date.now(),
         modelUsed: selectedModel,
       };
+      // Append error AI message to the (already truncated) conversation
       setConversations(prevConvs =>
         prevConvs.map(conv => {
              if (conv.id === currentConvId) {
@@ -817,32 +816,30 @@ export default function ChatPage() {
           if (conv.id === activeConversationId) {
             const messageIndex = conv.messages.findIndex(msg => msg.id === messageId);
             if (messageIndex !== -1) {
+              // Clean up blobUrls for all messages being removed
               const messagesToClean = conv.messages.slice(messageIndex);
-                messagesToClean.forEach(msgToClean => {
-                    if (msgToClean.downloadableFile?.blobUrl) {
-                        URL.revokeObjectURL(msgToClean.downloadableFile.blobUrl);
-                    }
-                });
+              messagesToClean.forEach(msgToClean => {
+                  if (msgToClean.downloadableFile?.blobUrl) {
+                      URL.revokeObjectURL(msgToClean.downloadableFile.blobUrl);
+                  }
+              });
               const updatedMessages = conv.messages.slice(0, messageIndex);
-              // If deleting the only messages, the conversation timestamp might be old,
-              // but deleting messages *within* a convo should update its timestamp to now if messages remain.
               return {
                 ...conv,
                 messages: updatedMessages,
+                // Update timestamp if messages remain, otherwise keep old (or let deleteConversation handle if it becomes empty)
                 timestamp: updatedMessages.length > 0 ? Date.now() : conv.timestamp 
               };
             }
           }
           return conv;
         }).filter(conv => { 
-            // This filter logic seems redundant if we're just updating messages.
-            // If the intent was to delete convos with no messages, it should be explicit.
-            // For now, let's assume we keep convos even if all messages are deleted from them via this action.
-            // If a conversation becomes empty, it might be better handled by a separate "delete empty convos" logic or rely on user to delete the convo itself.
-            // For simplicity, we'll keep the conversation entry even if messages array becomes empty here.
+            // This filter might be too aggressive if a convo becomes empty due to message deletion.
+            // It's better to let users explicitly delete empty conversations.
+            // For now, keep convos even if messages array becomes empty via this action.
             return true; 
          })
-         .sort((a,b) => b.timestamp - a.timestamp)
+         .sort((a,b) => b.timestamp - a.timestamp) // Re-sort after potential timestamp updates
         );
         toast({ title: "Message and subsequent messages deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
@@ -869,20 +866,15 @@ export default function ChatPage() {
   };
 
   const handleDownloadAIMessage = (messageId: string) => {
+    // This generic download is primarily for text content.
+    // File downloads from AI (like standardized CIQs) are handled by buttons directly on ChatMessage.
     const conversation = conversations.find(c => c.id === activeConversationId);
     const message = conversation?.messages.find(m => m.id === messageId && m.sender === 'ai');
     
-    if (message?.downloadableFile?.blobUrl) {
-        // This case should ideally be handled by the main download button on the message itself.
-        // If called from generic "download" action, we can still use it.
-        toast({title: "Info", description: "Use the download button on the message."});
-        // const link = document.createElement('a');
-        // link.href = message.downloadableFile.blobUrl;
-        // link.download = message.downloadableFile.name;
-        // document.body.appendChild(link);
-        // link.click();
-        // document.body.removeChild(link);
-    } else if (message?.text) { // Download plain text if no specific downloadable file
+    if (message?.downloadableFile?.blobUrl && message.text.includes(message.downloadableFile.name)) {
+        // If it's a file-centric AI message, prompt to use its dedicated download button.
+        toast({title: "Info", description: `Use the download button for '${message.downloadableFile.name}' on the message itself.`});
+    } else if (message?.text) { // Download plain text if no specific downloadable file or if it's primarily a text message
       const blob = new Blob([message.text], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -893,7 +885,7 @@ export default function ChatPage() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } else {
-      toast({ title: "Error", description: "Could not find message or file to download.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not find message text to download.", variant: "destructive" });
     }
   };
 
@@ -916,7 +908,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             return prevConvs;
         }
         
-        // Clean up blobUrl for the AI message being regenerated
+        // Clean up blobUrl for the AI message being regenerated, if any
         if (currentConversationForRegen.messages[aiMessageIndex]?.downloadableFile?.blobUrl) {
             URL.revokeObjectURL(currentConversationForRegen.messages[aiMessageIndex].downloadableFile.blobUrl);
         }
@@ -927,6 +919,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             return prevConvs;
         }
         
+        // Truncate messages up to and including the prompting user message
         baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex -1); 
         baseMessagesForRegen.push(promptingUserMessage);
 
@@ -934,15 +927,16 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         const updatedConvs = [...prevConvs];
         updatedConvs[convIndex] = {
             ...currentConversationForRegen,
-            messages: baseMessagesForRegen, 
-            timestamp: Date.now(),
+            messages: baseMessagesForRegen, // Set messages to only those up to the user prompt
+            timestamp: Date.now(), // Update conversation timestamp
         };
         return updatedConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 0)); 
+    await new Promise(resolve => setTimeout(resolve, 0)); // Ensure state update before proceeding
     
     if (!promptingUserMessage || !currentConvId) {
+        // This should not happen if the above logic is correct
         setIsLoading(false);
         return;
     }
@@ -953,35 +947,18 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     let queryTextForBackend = promptingUserMessage.text;
     const requestOptions: RequestInit = { method: 'POST' };
 
+    // For regeneration, if the original user message involved a file,
+    // the queryTextForBackend should already reflect that (e.g., "Standardizing: file.xlsx" or "[File Attached: file.xlsx] text").
+    // We will send a JSON request. The backend must handle this contextually if it needs file bytes (which it won't receive here).
     if (promptingUserMessage.file) {
-        if (queryTextForBackend.toLowerCase().includes("standardize this ciq")) {
-            queryTextForBackend = "standardize this CIQ";
-        } else if (!queryTextForBackend.trim()){
-            queryTextForBackend = `File: ${promptingUserMessage.file.name}`;
-        } else {
-            queryTextForBackend = `[File Attached: ${promptingUserMessage.file.name}] ${queryTextForBackend}`.trim();
-        }
-
-        // For regeneration involving a file, backend needs context or re-upload.
-        // This simplification sends query text that hints at the file.
-        // True file re-processing on regen would require storing/re-accessing original File object.
-        // The backend needs to be robust to handle this (e.g. if it's "standardize this CIQ" and no new file bytes, what does it do?)
-        // For now, we'll assume the query text is enough for the backend to re-evaluate.
-        // If a file is *required* by backend for this queryText, this might fail or need backend adjustment.
-        // Let's send it as FormData if a file was originally involved, even if file bytes are not re-sent effectively.
-        const formData = new FormData();
-        formData.append('query', queryTextForBackend);
-        // If the backend strictly needs the 'file' part in FormData when query implies a file:
-        if (promptingUserMessage.file) {
-             const tempFile = new File(["dummy data regen"], promptingUserMessage.file.name, {type: promptingUserMessage.file.type});
-             formData.append('file', tempFile, promptingUserMessage.file.name);
-        }
-        requestOptions.body = formData;
-
-    } else { 
-        requestOptions.headers = { 'Content-Type': 'application/json' };
-        requestOptions.body = JSON.stringify({ query: queryTextForBackend, model: selectedModel });
+        // queryTextForBackend is already prepared from promptingUserMessage.text
+        // Example: if original was "standardize this ciq" with a file, promptingUserMessage.text is "Standardizing: file.name"
+        // If it was a generic file query, text is "[File Attached: file.name] actual_query"
+        // The backend's `if 'file' in request.files` will be false.
     }
+    
+    requestOptions.headers = { 'Content-Type': 'application/json' };
+    requestOptions.body = JSON.stringify({ query: queryTextForBackend, model: selectedModel });
 
 
     try {
@@ -1006,6 +983,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         if (jsonResponse.error) throw new Error(jsonResponse.error);
         
         if (jsonResponse.standardized_file_base64 && jsonResponse.request_id) {
+            // This path might be hit if the regenerated query was for standardization
             isStandardizationReqLocal = true;
             standardizationReqIdLocal = jsonResponse.request_id;
             unmatchedColsLocal = jsonResponse.unmatched_columns;
@@ -1016,7 +994,9 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
             aiResponseText = `Standardized CIQ '${filename}' is ready for download.`;
              if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
-                aiResponseText += `\n\nSome columns were not found in the standard template.`;
+                aiResponseText += `\n\nSome columns were not found in the standard template. You'll be asked if you want to update.`;
+            } else {
+                 aiResponseText += `\n\nAll columns matched the standard template.`;
             }
             toast({ title: "Standardization Complete" });
         } else if (jsonResponse.request_id || jsonResponse.unmatched_columns || jsonResponse.standardized_file_base64) {
@@ -1024,6 +1004,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             if (!jsonResponse.standardized_file_base64) debugMessage += "Missing 'standardized_file_base64'. ";
             if (!jsonResponse.request_id) debugMessage += "Missing 'request_id'. ";
             if (!jsonResponse.response && !jsonResponse.standardized_file_base64) debugMessage += "Also missing 'response' field for fallback.";
+            console.warn("Incomplete standardization JSON from backend (on regenerate):", jsonResponse);
             aiResponseText = jsonResponse.response || debugMessage.trim();
              if (jsonResponse.request_id) {
               isStandardizationReqLocal = true;
@@ -1032,10 +1013,11 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
               simMappingLocal = jsonResponse.similarity_mapping;
             }
         }
-         else {
+         else { // Regular text response
             aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
         } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
+            // Direct file download response
             const blob = await backendResponse.blob();
             const contentDisposition = backendResponse.headers.get('Content-Disposition');
             let filename = "downloaded_file";
@@ -1069,13 +1051,14 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             standardizationRequestId: standardizationReqIdLocal,
             unmatchedColumns: unmatchedColsLocal,
             similarityMapping: simMappingLocal,
-            isStandardizationConfirmed: false,
+            isStandardizationConfirmed: false, // Reset for new AI response
         };
         
+        // Append the new AI message to baseMessagesForRegen
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === currentConvId) {
-                    // Ensure baseMessagesForRegen is used correctly
+                    // baseMessagesForRegen already contains the prompting user message
                     return { ...conv, messages: [...baseMessagesForRegen, newAiMessage], timestamp: Date.now() };
                 }
                 return conv;
@@ -1103,10 +1086,10 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
           timestamp: Date.now(),
           modelUsed: selectedModel, 
         };
+        // Append error AI message to baseMessagesForRegen
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                  if (conv.id === currentConvId) {
-                    // Ensure baseMessagesForRegen is used correctly for error case too
                     return { ...conv, messages: [...baseMessagesForRegen, errorAiMessage], timestamp: Date.now() };
                 }
                 return conv;
@@ -1127,7 +1110,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json(); // Assuming error response is JSON
         throw new Error(errorData.error || `Failed to confirm update: ${response.status}`);
       }
 
@@ -1137,6 +1120,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
         description: result.message || (decision === 'yes' ? "Standard template update initiated." : "No changes made to standard template."),
       });
 
+      // Update the message to reflect confirmation
       setConversations(prevConvs =>
         prevConvs.map(conv => {
           if (conv.id === activeConversationId) {
@@ -1144,10 +1128,10 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
               ...conv,
               messages: conv.messages.map(msg =>
                 msg.id === messageId
-                  ? { ...msg, isStandardizationConfirmed: true, timestamp: Date.now() }
+                  ? { ...msg, isStandardizationConfirmed: true, timestamp: Date.now() } // Update timestamp of message
                   : msg
               ),
-              timestamp: Date.now(),
+              timestamp: Date.now(), // Update conversation timestamp
             };
           }
           return conv;
@@ -1187,7 +1171,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
     if (!editingConversation) return;
     setConversations(prev => prev.map(conv =>
       conv.id === editingConversation.id
-        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() }
+        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } // Update timestamp on title edit
         : conv
     ).sort((a,b) => b.timestamp - a.timestamp)); 
     setEditingConversation(null);
@@ -1207,22 +1191,25 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
       description: "Are you sure you want to delete this entire conversation? This action cannot be undone.",
       onConfirm: () => {
         setConversations(prevConversations => {
+            // Clean up blobUrls for the conversation being deleted
             const convToDelete = prevConversations.find(c => c.id === conversationId);
             convToDelete?.messages.forEach(msg => {
                 if (msg.downloadableFile?.blobUrl) {
                     URL.revokeObjectURL(msg.downloadableFile.blobUrl);
                 }
             });
+
             const newConversations = prevConversations.filter(conv => conv.id !== conversationId);
-            if (activeConversationId === conversationId) {
+            if (activeConversationId === conversationId) { // If deleting active conversation
                 if (newConversations.length > 0) {
+                    // Select the most recent remaining conversation
                     const mostRecent = [...newConversations].sort((a, b) => b.timestamp - a.timestamp)[0];
                     setActiveConversationId(mostRecent.id);
                 } else {
-                    setActiveConversationId(null); 
+                    setActiveConversationId(null); // No conversations left
                 }
             }
-            return newConversations;
+            return newConversations; // No need to re-sort here, filter preserves order or sort happens in useEffect
         });
         toast({ title: "Conversation deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
@@ -1237,6 +1224,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
       title: "Delete All Chats?",
       description: "Are you sure you want to delete all your conversations? This action cannot be undone and will clear all chat history.",
       onConfirm: () => {
+        // Clean up all blobUrls
         conversations.forEach(conv => {
             conv.messages.forEach(msg => {
                 if (msg.downloadableFile?.blobUrl) {
