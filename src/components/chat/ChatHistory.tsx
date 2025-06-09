@@ -99,9 +99,9 @@ export function ChatHistory({
               </AvatarFallback>
             </Avatar>
             <div className="flex items-center space-x-1 bg-card text-card-foreground p-3 rounded-lg shadow-md rounded-bl-none">
-              <span className="h-2 w-2 bg-current rounded-full animate-dot-pulse [animation-delay:-0.3s]"></span>
-              <span className="h-2 w-2 bg-current rounded-full animate-dot-pulse [animation-delay:-0.15s]"></span>
-              <span className="h-2 w-2 bg-current rounded-full animate-dot-pulse"></span>
+              <span className="h-1.5 w-1.5 bg-current rounded-full animate-dot-pulse [animation-delay:-0.3s]"></span>
+              <span className="h-1.5 w-1.5 bg-current rounded-full animate-dot-pulse [animation-delay:-0.15s]"></span>
+              <span className="h-1.5 w-1.5 bg-current rounded-full animate-dot-pulse"></span>
             </div>
           </div>
         )}

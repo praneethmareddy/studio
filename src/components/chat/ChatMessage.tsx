@@ -173,7 +173,7 @@ export function ChatMessage({
           )}
 
           {/* Standardization Confirmation UI */}
-          {!isUser && message.isStandardizationRequest && !message.isStandardizationConfirmed && (
+          {!isUser && message.isStandardizationRequest && !message.isStandardizationConfirmed && message.unmatchedColumns && message.unmatchedColumns.length > 0 && (
             <Card className="m-2 border-dashed border-primary/50 bg-primary/5 dark:bg-primary/10">
               <CardHeader className="pb-2 pt-3 px-3">
                 <CardTitle className="text-sm flex items-center">
@@ -222,7 +222,7 @@ export function ChatMessage({
           
           {/* Downloadable File Button */}
           {message.downloadableFile && !isUser && (
-             <div className={cn("px-3 pb-2", message.isStandardizationRequest && !message.isStandardizationConfirmed ? "pt-0" : "pt-1")}>
+             <div className={cn("px-3 pb-2", message.isStandardizationRequest && !message.isStandardizationConfirmed && message.unmatchedColumns && message.unmatchedColumns.length > 0 ? "pt-0" : "pt-1")}>
                { (message.text && message.text.trim() !== '') && !message.isStandardizationRequest && // Only show hr if there's text and it's not part of standardization card
                  <hr className={cn( "my-2 border-t", "border-card-foreground/20")} />
                }

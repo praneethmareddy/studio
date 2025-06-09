@@ -497,7 +497,7 @@ export default function ChatPage() {
         
         const blobUrl = URL.createObjectURL(blob);
         downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
-        aiResponseText = `File '${filename}' is ready for download.`;
+        aiResponseText = `File '${filename}' is ready for download. Successfully downloaded '${filename}'.`;
         toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.` });
       } else {
         aiResponseText = await backendResponse.text();
@@ -1103,7 +1103,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
     if (!activeConversationId) return;
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/confirm_update', {
+      const response = await fetch('http://localhost:5000/confirm-update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ request_id: requestId, decision: decision }),
@@ -1429,13 +1429,13 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
               </div>
                {selectedModel === 'llama3' && <Cpu size={20} className="mr-2 text-primary" />}
                {selectedModel === 'deepseek-r1' && <Brain size={20} className="mr-2 text-primary" />}
-              <h1 className="text-xl font-semibold text-foreground">GenAI Config Generator</h1>
-              {selectedModel === 'llama3' && <Image src="/robo1.gif" alt="Llama 3 Robot" width={36} height={36} className="ml-2" unoptimized={true} />}
-              {selectedModel === 'deepseek-r1' && <Image src="/robo2.gif" alt="Deepseek Robot" width={36} height={36} className="ml-2" unoptimized={true} />}
+              <h1 className="text-lg md:text-xl font-semibold text-foreground">GenAI Config Generator</h1>
+              {selectedModel === 'llama3' && <Image src="/robo1.gif" alt="Llama 3 Robot" width={30} height={30} className="ml-2" unoptimized={true} />}
+              {selectedModel === 'deepseek-r1' && <Image src="/robo2.gif" alt="Deepseek Robot" width={30} height={30} className="ml-2" unoptimized={true} />}
             </div>
             <div className="flex items-center gap-2">
               <Select value={selectedModel} onValueChange={setSelectedModel}>
-                <SelectTrigger className="w-[170px] h-9 text-sm hover:shadow-md transition-shadow duration-300 ease-in-out">
+                <SelectTrigger className="w-[150px] h-9 text-sm hover:shadow-md transition-shadow duration-300 ease-in-out">
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
