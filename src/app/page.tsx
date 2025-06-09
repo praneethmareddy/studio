@@ -202,18 +202,13 @@ export default function ChatPage() {
   }, [conversations, toast]);
 
   useEffect(() => {
-    // This effect ensures a valid activeConversationId if conversations change
-    // or if the initial activeConversationId from localStorage is invalid.
     if (!activeConversationId && conversations.length > 0) {
-        // If no active ID but conversations exist, select the most recent
         const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
         setActiveConversationId(mostRecent.id);
     } else if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
-        // If active ID is set but no longer valid (e.g., chat deleted), update it
-        const mostRecent = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
-        setActiveConversationId(mostRecent ? mostRecent.id : null);
+        const mostRecentAfterDeletion = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
+        setActiveConversationId(mostRecentAfterDeletion ? mostRecentAfterDeletion.id : null);
     } else if (conversations.length === 0 && activeConversationId !== null) {
-        // If no conversations left, clear active ID
         setActiveConversationId(null);
     }
   }, [conversations, activeConversationId]);
@@ -359,10 +354,9 @@ export default function ChatPage() {
 
     if (file) { 
         fileInfo = { name: file.name, type: file.type, size: file.size };
-        // For backend, always send "standardize this CIQ" if it's the intent
         if (trimmedText.toLowerCase().includes("standardize this ciq") || trimmedText.toLowerCase().includes("standardize ciq")) {
             messageTextForBackend = "standardize this CIQ";
-            displayMessageText = `Standardizing: ${file.name}`; // User-facing text
+            displayMessageText = `Standardizing: ${file.name}`; 
         } else {
             messageTextForBackend = `[File Attached: ${file.name}] ${trimmedText}`.trim();
         }
@@ -414,7 +408,7 @@ export default function ChatPage() {
       if (file) {
         const formData = new FormData();
         formData.append('file', file, file.name);
-        formData.append('query', messageTextForBackend); // messageTextForBackend might be "standardize this CIQ"
+        formData.append('query', messageTextForBackend); 
         requestOptions.body = formData;
       } else { 
         requestOptions.headers = { 'Content-Type': 'application/json' };
@@ -430,11 +424,11 @@ export default function ChatPage() {
       
       const contentType = backendResponse.headers.get("content-type");
       let aiResponseText = "";
-      let downloadableFile: Message['downloadableFile'] | undefined = undefined;
-      let isStandardizationReq = false;
-      let standardizationReqId: string | undefined = undefined;
-      let unmatchedCols: string[] | undefined = undefined;
-      let simMapping: Record<string, string> | undefined = undefined;
+      let downloadableFileLocal: Message['downloadableFile'] | undefined = undefined;
+      let isStandardizationReqLocal = false;
+      let standardizationReqIdLocal: string | undefined = undefined;
+      let unmatchedColsLocal: string[] | undefined = undefined;
+      let simMappingLocal: Record<string, string> | undefined = undefined;
 
 
       if (contentType && contentType.includes("application/json")) {
@@ -444,28 +438,41 @@ export default function ChatPage() {
         }
         
         if (jsonResponse.standardized_file_base64 && jsonResponse.request_id) {
-            // This is the new CIQ standardization response
-            isStandardizationReq = true;
-            standardizationReqId = jsonResponse.request_id;
-            unmatchedCols = jsonResponse.unmatched_columns;
-            simMapping = jsonResponse.similarity_mapping;
+            isStandardizationReqLocal = true;
+            standardizationReqIdLocal = jsonResponse.request_id;
+            unmatchedColsLocal = jsonResponse.unmatched_columns;
+            simMappingLocal = jsonResponse.similarity_mapping;
 
             const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             const blobUrl = URL.createObjectURL(blob);
-            const filename = "standardized_ciq.xlsx";
-            downloadableFile = { name: filename, type: blob.type, blobUrl };
+            const filename = jsonResponse.filename || "standardized_ciq.xlsx"; // Use filename from backend if provided
+            downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
             
             aiResponseText = `Standardized CIQ '${filename}' is ready for download.`;
-            if (unmatchedCols && unmatchedCols.length > 0) {
+            if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
                 aiResponseText += `\n\nSome columns were not found in the standard template.`;
             }
             toast({ title: "Standardization Complete", description: `'${filename}' is ready.` });
-        } else {
-            // Regular text response
-            aiResponseText = jsonResponse.response || "Received an empty response.";
+        } else if (jsonResponse.request_id || jsonResponse.unmatched_columns || jsonResponse.standardized_file_base64) {
+            // Incomplete standardization response
+            let debugMessage = "Standardization response from backend is incomplete. ";
+            if (!jsonResponse.standardized_file_base64) debugMessage += "Missing 'standardized_file_base64'. ";
+            if (!jsonResponse.request_id) debugMessage += "Missing 'request_id'. ";
+            if (!jsonResponse.response && !jsonResponse.standardized_file_base64) debugMessage += "Also missing 'response' field for a fallback message.";
+            console.warn("Incomplete standardization JSON from backend:", jsonResponse);
+            aiResponseText = jsonResponse.response || debugMessage.trim();
+            // Potentially still set standardization flags if some parts are present
+            if (jsonResponse.request_id) {
+              isStandardizationReqLocal = true; // Mark as standardization attempt even if incomplete
+              standardizationReqIdLocal = jsonResponse.request_id;
+              unmatchedColsLocal = jsonResponse.unmatched_columns;
+              simMappingLocal = jsonResponse.similarity_mapping;
+            }
+        }
+        else {
+            aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
       } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
-        // Direct file download (for other types of queries, not standardization)
         const blob = await backendResponse.blob();
         const contentDisposition = backendResponse.headers.get('Content-Disposition');
         let filename = "downloaded_file"; 
@@ -479,7 +486,7 @@ export default function ChatPage() {
         }
         
         const blobUrl = URL.createObjectURL(blob);
-        downloadableFile = { name: filename, type: blob.type, blobUrl };
+        downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
         aiResponseText = `File '${filename}' is ready for download.`;
         toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.` });
       } else {
@@ -488,7 +495,7 @@ export default function ChatPage() {
       }
       
       let processedResponseText = aiResponseText;
-      if (selectedModel === 'deepseek-r1' && !downloadableFile && !isStandardizationReq) {
+      if (selectedModel === 'deepseek-r1' && !downloadableFileLocal && !isStandardizationReqLocal) {
         processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
       }
 
@@ -499,11 +506,11 @@ export default function ChatPage() {
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
-        downloadableFile: downloadableFile,
-        isStandardizationRequest: isStandardizationReq,
-        standardizationRequestId: standardizationReqId,
-        unmatchedColumns: unmatchedCols,
-        similarityMapping: simMapping,
+        downloadableFile: downloadableFileLocal,
+        isStandardizationRequest: isStandardizationReqLocal,
+        standardizationRequestId: standardizationReqIdLocal,
+        unmatchedColumns: unmatchedColsLocal,
+        similarityMapping: simMappingLocal,
         isStandardizationConfirmed: false,
       };
 
@@ -557,7 +564,6 @@ export default function ChatPage() {
     if (!editingMessage || !activeConversationId) return;
 
     const trimmedEditingText = editingMessageText.trim();
-     // Allow sending if there's a file, even if text is empty after trim (text might be "File: filename.ext")
     if (!trimmedEditingText && !editingMessage.file) {
       toast({ title: "Cannot send empty message", variant: "destructive" });
       return;
@@ -566,10 +572,9 @@ export default function ChatPage() {
     const currentConvId = activeConversationId; 
 
     let textForBackend = trimmedEditingText;
-    let displayUserText = trimmedEditingText; // What the user sees for their edited message
+    let displayUserText = trimmedEditingText;
 
     if (editingMessage.file) {
-        // If it's a standardization request, the backend expects "standardize this CIQ"
         if (trimmedEditingText.toLowerCase().includes("standardize this ciq") || trimmedEditingText.toLowerCase().includes("standardize ciq")) {
             textForBackend = "standardize this CIQ";
             displayUserText = `Standardizing: ${editingMessage.file.name}`;
@@ -578,11 +583,10 @@ export default function ChatPage() {
             if (!trimmedEditingText) displayUserText = `File: ${editingMessage.file.name}`;
         }
     }
-    if (!textForBackend && editingMessage.file) { // Fallback if textForBackend is empty but file exists
+    if (!textForBackend && editingMessage.file) {
         textForBackend = `File: ${editingMessage.file.name}`;
         if(!displayUserText) displayUserText = `File: ${editingMessage.file.name}`;
     }
-
 
     let updatedUserMessage: Message | null = null;
     let baseMessagesForNewAIResponse: Message[] = [];
@@ -595,20 +599,27 @@ export default function ChatPage() {
       const messageIndex = targetConversation.messages.findIndex(msg => msg.id === editingMessage.id);
       if (messageIndex === -1) return prevConvs;
 
+      // Clean up blobUrl for the AI message that will be removed (if any)
+      if (targetConversation.messages[messageIndex + 1]?.downloadableFile?.blobUrl) {
+        URL.revokeObjectURL(targetConversation.messages[messageIndex + 1].downloadableFile.blobUrl);
+      }
+
       updatedUserMessage = {
         ...targetConversation.messages[messageIndex],
         text: displayUserText, 
         timestamp: Date.now(),
+        // Keep original file info if it existed, editingMessage.file should have it
+        file: editingMessage.file 
       };
-
+      
       baseMessagesForNewAIResponse = [
         ...targetConversation.messages.slice(0, messageIndex),
-        updatedUserMessage, // The updated user message
+        updatedUserMessage, 
       ];
       
       const updatedConv = {
         ...targetConversation,
-        messages: baseMessagesForNewAIResponse, // Truncate here, AI response will be added after fetch
+        messages: baseMessagesForNewAIResponse, 
         timestamp: Date.now(),
       };
       
@@ -626,38 +637,43 @@ export default function ChatPage() {
 
     try {
       const requestOptions: RequestInit = { method: 'POST' };
-      if (editingMessage.file) { // If original message had a file, resend it
-        const formData = new FormData();
-        // We need to re-fetch the file if it wasn't passed through editingMessage state
-        // For now, assuming editingMessage.file is the original File object or can be reconstructed
-        // This part might need adjustment if editingMessage.file is just metadata
-        // Let's assume for this flow, editing doesn't re-upload, but uses original file context if available
-        // The backend logic determines if it can use file context without re-upload
-        // For standardization, it will use the text "standardize this CIQ"
-        formData.append('query', textForBackend);
-        // If actual file re-upload on edit is needed, `attachedFile` state would need to be managed during edit
-        // For now, if `editingMessage.file` exists, we inform backend using `textForBackend`
-        // If backend requires file bytes again on edit, this needs a File object.
-        // This example simplifies by assuming textForBackend is enough to contextualize.
-        // If the standardization flow is being re-triggered, backend must handle it
-        // based on "standardize this CIQ" and potentially a reference to the original file (not implemented here).
-        // Let's assume if there's `editingMessage.file`, we are trying to replicate the original call type.
-        // This is tricky if the File object itself isn't preserved.
-        // The simplest approach is to only allow editing of the TEXT of a message.
-        // If a file was part of the original, the backend needs to know about it via text.
-        // The current backend uses 'query' from form if file exists.
-        if (textForBackend.toLowerCase().includes("standardize this ciq") && editingMessage.file) {
-             const tempFile = new File(["dummy"], editingMessage.file.name, {type: editingMessage.file.type});
-             formData.append('file', tempFile, editingMessage.file.name); // Send a dummy or reconstruct if possible
-        }
-        requestOptions.body = formData;
-      } else {
+      // For editing, if the original message had a file, we need to signal this to the backend.
+      // The simplest way for this app's backend is to rely on `textForBackend`
+      // which includes "[File Attached: ...]" or "standardize this CIQ".
+      // Re-uploading the actual file bytes on edit is complex if not re-selected by user.
+      // The current backend's `/query` with FormData expects a file if `textForBackend` implies it.
+      // This example assumes that if `editingMessage.file` exists, the `textForBackend`
+      // is sufficient for the backend to understand the context of the original file.
+      // If the backend *must* receive file bytes again for every edit involving a file,
+      // this part of the frontend would need a way to re-access or re-upload the original file.
+      // For "standardize this CIQ", if `editingMessage.file` is present, we must send FormData.
+      if (textForBackend.toLowerCase().includes("standardize this ciq") && editingMessage.file) {
+          const formData = new FormData();
+          // This is tricky: we don't have the original File object easily available here for re-upload.
+          // The backend would need to handle this contextually or the user would need to re-attach.
+          // For a simplified re-send, we can try sending a dummy file if backend requires 'file' field
+          // when query is "standardize this CIQ". This assumes backend can link it to original context.
+          // THIS IS A SIMPLIFICATION AND MAY NOT WORK WITH ALL BACKEND IMPLEMENTATIONS.
+          // A more robust solution is to prevent editing of file content, or prompt re-upload.
+          const tempFile = new File(["dummy data to ensure formdata"], editingMessage.file.name, {type: editingMessage.file.type});
+          formData.append('file', tempFile, editingMessage.file.name);
+          formData.append('query', textForBackend); // "standardize this CIQ"
+          requestOptions.body = formData;
+      } else if (editingMessage.file) { // Other file-involved messages
+          const formData = new FormData();
+          // Similar issue as above for non-standardization file messages
+          const tempFile = new File(["dummy data"], editingMessage.file.name, {type: editingMessage.file.type});
+          formData.append('file', tempFile, editingMessage.file.name);
+          formData.append('query', textForBackend); // e.g. "[File Attached: name] text"
+          requestOptions.body = formData;
+      }
+      else {
         requestOptions.headers = { 'Content-Type': 'application/json' };
         requestOptions.body = JSON.stringify({ query: textForBackend, model: selectedModel });
       }
 
-      const backendResponse = await fetch('http://localhost:5000/query', requestOptions);
 
+      const backendResponse = await fetch('http://localhost:5000/query', requestOptions);
 
       if (!backendResponse.ok) {
         const errorText = await backendResponse.text();
@@ -666,31 +682,45 @@ export default function ChatPage() {
 
       const contentType = backendResponse.headers.get("content-type");
       let aiResponseText = "";
-      let downloadableFile: Message['downloadableFile'] | undefined = undefined;
-      let isStandardizationReq = false;
-      let standardizationReqId: string | undefined = undefined;
-      let unmatchedCols: string[] | undefined = undefined;
-      let simMapping: Record<string, string> | undefined = undefined;
+      let downloadableFileLocal: Message['downloadableFile'] | undefined = undefined;
+      let isStandardizationReqLocal = false;
+      let standardizationReqIdLocal: string | undefined = undefined;
+      let unmatchedColsLocal: string[] | undefined = undefined;
+      let simMappingLocal: Record<string, string> | undefined = undefined;
 
       if (contentType && contentType.includes("application/json")) {
         const jsonResponse = await backendResponse.json();
         if (jsonResponse.error) throw new Error(jsonResponse.error);
 
         if (jsonResponse.standardized_file_base64 && jsonResponse.request_id) {
-            isStandardizationReq = true;
-            standardizationReqId = jsonResponse.request_id;
-            unmatchedCols = jsonResponse.unmatched_columns;
-            simMapping = jsonResponse.similarity_mapping;
+            isStandardizationReqLocal = true;
+            standardizationReqIdLocal = jsonResponse.request_id;
+            unmatchedColsLocal = jsonResponse.unmatched_columns;
+            simMappingLocal = jsonResponse.similarity_mapping;
             const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             const blobUrl = URL.createObjectURL(blob);
-            downloadableFile = { name: "standardized_ciq.xlsx", type: blob.type, blobUrl };
-            aiResponseText = `Standardized CIQ 'standardized_ciq.xlsx' is ready for download.`;
-            if (unmatchedCols && unmatchedCols.length > 0) {
+            const filename = jsonResponse.filename || "standardized_ciq.xlsx";
+            downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
+            aiResponseText = `Standardized CIQ '${filename}' is ready for download.`;
+            if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
                 aiResponseText += `\n\nSome columns were not found in the standard template.`;
             }
             toast({ title: "Standardization Complete", description: "File is ready."});
-        } else {
-            aiResponseText = jsonResponse.response || "Received an empty response.";
+        } else if (jsonResponse.request_id || jsonResponse.unmatched_columns || jsonResponse.standardized_file_base64) {
+            let debugMessage = "Standardization response from backend is incomplete. ";
+            if (!jsonResponse.standardized_file_base64) debugMessage += "Missing 'standardized_file_base64'. ";
+            if (!jsonResponse.request_id) debugMessage += "Missing 'request_id'. ";
+            if (!jsonResponse.response && !jsonResponse.standardized_file_base64) debugMessage += "Also missing 'response' field for fallback.";
+            aiResponseText = jsonResponse.response || debugMessage.trim();
+            if (jsonResponse.request_id) {
+              isStandardizationReqLocal = true; 
+              standardizationReqIdLocal = jsonResponse.request_id;
+              unmatchedColsLocal = jsonResponse.unmatched_columns;
+              simMappingLocal = jsonResponse.similarity_mapping;
+            }
+        }
+         else {
+            aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
       } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
         const blob = await backendResponse.blob();
@@ -702,7 +732,7 @@ export default function ChatPage() {
           if (filenameMatch && filenameMatch.length > 1) filename = filenameMatch[1];
         }
         const blobUrl = URL.createObjectURL(blob);
-        downloadableFile = { name: filename, type: blob.type, blobUrl };
+        downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
         aiResponseText = `File '${filename}' is ready for download.`;
         toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.`});
       } else {
@@ -710,7 +740,7 @@ export default function ChatPage() {
       }
 
       let processedResponseText = aiResponseText;
-      if (selectedModel === 'deepseek-r1' && !downloadableFile && !isStandardizationReq) {
+      if (selectedModel === 'deepseek-r1' && !downloadableFileLocal && !isStandardizationReqLocal) {
         processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
       }
 
@@ -721,18 +751,17 @@ export default function ChatPage() {
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
-        downloadableFile: downloadableFile,
-        isStandardizationRequest: isStandardizationReq,
-        standardizationRequestId: standardizationReqId,
-        unmatchedColumns: unmatchedCols,
-        similarityMapping: simMapping,
+        downloadableFile: downloadableFileLocal,
+        isStandardizationRequest: isStandardizationReqLocal,
+        standardizationRequestId: standardizationReqIdLocal,
+        unmatchedColumns: unmatchedColsLocal,
+        similarityMapping: simMappingLocal,
         isStandardizationConfirmed: false,
       };
 
       setConversations(prevConvs =>
         prevConvs.map(conv => {
             if (conv.id === currentConvId) {
-                // Append the new AI message to the already truncated messages list
                 return { ...conv, messages: [...baseMessagesForNewAIResponse, newAiMessage], timestamp: Date.now() };
             }
             return conv;
@@ -795,6 +824,8 @@ export default function ChatPage() {
                     }
                 });
               const updatedMessages = conv.messages.slice(0, messageIndex);
+              // If deleting the only messages, the conversation timestamp might be old,
+              // but deleting messages *within* a convo should update its timestamp to now if messages remain.
               return {
                 ...conv,
                 messages: updatedMessages,
@@ -804,6 +835,11 @@ export default function ChatPage() {
           }
           return conv;
         }).filter(conv => { 
+            // This filter logic seems redundant if we're just updating messages.
+            // If the intent was to delete convos with no messages, it should be explicit.
+            // For now, let's assume we keep convos even if all messages are deleted from them via this action.
+            // If a conversation becomes empty, it might be better handled by a separate "delete empty convos" logic or rely on user to delete the convo itself.
+            // For simplicity, we'll keep the conversation entry even if messages array becomes empty here.
             return true; 
          })
          .sort((a,b) => b.timestamp - a.timestamp)
@@ -837,8 +873,16 @@ export default function ChatPage() {
     const message = conversation?.messages.find(m => m.id === messageId && m.sender === 'ai');
     
     if (message?.downloadableFile?.blobUrl) {
+        // This case should ideally be handled by the main download button on the message itself.
+        // If called from generic "download" action, we can still use it.
         toast({title: "Info", description: "Use the download button on the message."});
-    } else if (message?.text) { 
+        // const link = document.createElement('a');
+        // link.href = message.downloadableFile.blobUrl;
+        // link.download = message.downloadableFile.name;
+        // document.body.appendChild(link);
+        // link.click();
+        // document.body.removeChild(link);
+    } else if (message?.text) { // Download plain text if no specific downloadable file
       const blob = new Blob([message.text], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -872,16 +916,19 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             return prevConvs;
         }
         
+        // Clean up blobUrl for the AI message being regenerated
+        if (currentConversationForRegen.messages[aiMessageIndex]?.downloadableFile?.blobUrl) {
+            URL.revokeObjectURL(currentConversationForRegen.messages[aiMessageIndex].downloadableFile.blobUrl);
+        }
+
         promptingUserMessage = currentConversationForRegen.messages[aiMessageIndex - 1];
         if (promptingUserMessage.sender !== 'user') {
             toast({ title: "Error", description: "Cannot regenerate. Preceding message is not from user.", variant: "destructive" });
             return prevConvs;
         }
         
-        // Truncate messages to include only up to and including the prompting user message
-        baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex); 
-        // Remove the AI message we are about to regenerate
-        baseMessagesForRegen.pop();
+        baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex -1); 
+        baseMessagesForRegen.push(promptingUserMessage);
 
 
         const updatedConvs = [...prevConvs];
@@ -904,40 +951,34 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     toast({ title: "Regenerating AI response..." });
     
     let queryTextForBackend = promptingUserMessage.text;
-    // Determine if the original prompt was for standardization
-    const isStandardizationRegen = promptingUserMessage.text.toLowerCase().includes("standardize this ciq") && promptingUserMessage.file;
-
     const requestOptions: RequestInit = { method: 'POST' };
-    if (isStandardizationRegen && promptingUserMessage.file) {
-        queryTextForBackend = "standardize this CIQ";
-        const formData = new FormData();
-        // For regeneration, we'd ideally re-use the original file.
-        // This requires the File object to be available or a mechanism to re-fetch/reference it.
-        // For simplicity, if file metadata exists, we assume backend can handle with query.
-        // The backend standardization needs a file. This part is tricky for regen.
-        // Let's assume we need to signal that a file was part of it.
-        // A robust solution would involve storing file references or re-uploading, which is complex.
-        // For now, this might not correctly re-trigger file-based standardization on regen
-        // unless backend handles "standardize this CIQ" without new file bytes if contextually aware.
-        // Let's send query and if backend has file context it might work.
-        // To be safe, if it's a standardization regen, it must have the file.
-        // This means we'd need the original File object or re-prompt user.
-        // The current design doesn't store original File objects in messages state.
-        // Let's show a message that file-based standardization cannot be directly regenerated this way.
-         toast({ title: "Info", description: "Regenerating file-based standardization is not directly supported. Please resubmit the file and query.", variant: "default" });
-         setIsLoading(false);
-         return; // Or handle differently
-    } else if (promptingUserMessage.file) { // Other file-based queries
-        queryTextForBackend = `[File Attached: ${promptingUserMessage.file.name}] ${promptingUserMessage.text}`.trim();
-         if (!promptingUserMessage.text.trim() && promptingUserMessage.file) { 
-             queryTextForBackend = `File: ${promptingUserMessage.file.name}`;
+
+    if (promptingUserMessage.file) {
+        if (queryTextForBackend.toLowerCase().includes("standardize this ciq")) {
+            queryTextForBackend = "standardize this CIQ";
+        } else if (!queryTextForBackend.trim()){
+            queryTextForBackend = `File: ${promptingUserMessage.file.name}`;
+        } else {
+            queryTextForBackend = `[File Attached: ${promptingUserMessage.file.name}] ${queryTextForBackend}`.trim();
         }
-        // Similar issue here for re-sending file content
+
+        // For regeneration involving a file, backend needs context or re-upload.
+        // This simplification sends query text that hints at the file.
+        // True file re-processing on regen would require storing/re-accessing original File object.
+        // The backend needs to be robust to handle this (e.g. if it's "standardize this CIQ" and no new file bytes, what does it do?)
+        // For now, we'll assume the query text is enough for the backend to re-evaluate.
+        // If a file is *required* by backend for this queryText, this might fail or need backend adjustment.
+        // Let's send it as FormData if a file was originally involved, even if file bytes are not re-sent effectively.
         const formData = new FormData();
         formData.append('query', queryTextForBackend);
-        // formData.append('file',...); // Needs file object
+        // If the backend strictly needs the 'file' part in FormData when query implies a file:
+        if (promptingUserMessage.file) {
+             const tempFile = new File(["dummy data regen"], promptingUserMessage.file.name, {type: promptingUserMessage.file.type});
+             formData.append('file', tempFile, promptingUserMessage.file.name);
+        }
         requestOptions.body = formData;
-    } else { // Text-only query
+
+    } else { 
         requestOptions.headers = { 'Content-Type': 'application/json' };
         requestOptions.body = JSON.stringify({ query: queryTextForBackend, model: selectedModel });
     }
@@ -953,33 +994,47 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         
         const contentType = backendResponse.headers.get("content-type");
         let aiResponseText = "";
-        let downloadableFile: Message['downloadableFile'] | undefined = undefined;
-        let isStandardizationReq = false;
-        let standardizationReqId: string | undefined = undefined;
-        let unmatchedCols: string[] | undefined = undefined;
-        let simMapping: Record<string, string> | undefined = undefined;
+        let downloadableFileLocal: Message['downloadableFile'] | undefined = undefined;
+        let isStandardizationReqLocal = false;
+        let standardizationReqIdLocal: string | undefined = undefined;
+        let unmatchedColsLocal: string[] | undefined = undefined;
+        let simMappingLocal: Record<string, string> | undefined = undefined;
 
 
-        if (contentType && contentType.includes("application/json")) {
-            const jsonResponse = await backendResponse.json();
-            if (jsonResponse.error) throw new Error(jsonResponse.error);
-            
-            if (jsonResponse.standardized_file_base64 && jsonResponse.request_id) {
-                isStandardizationReq = true;
-                standardizationReqId = jsonResponse.request_id;
-                unmatchedCols = jsonResponse.unmatched_columns;
-                simMapping = jsonResponse.similarity_mapping;
-                const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                const blobUrl = URL.createObjectURL(blob);
-                downloadableFile = { name: "standardized_ciq.xlsx", type: blob.type, blobUrl };
-                aiResponseText = `Standardized CIQ 'standardized_ciq.xlsx' is ready for download.`;
-                 if (unmatchedCols && unmatchedCols.length > 0) {
-                    aiResponseText += `\n\nSome columns were not found in the standard template.`;
-                }
-                toast({ title: "Standardization Complete" });
-            } else {
-                aiResponseText = jsonResponse.response || "Received an empty response.";
+      if (contentType && contentType.includes("application/json")) {
+        const jsonResponse = await backendResponse.json();
+        if (jsonResponse.error) throw new Error(jsonResponse.error);
+        
+        if (jsonResponse.standardized_file_base64 && jsonResponse.request_id) {
+            isStandardizationReqLocal = true;
+            standardizationReqIdLocal = jsonResponse.request_id;
+            unmatchedColsLocal = jsonResponse.unmatched_columns;
+            simMappingLocal = jsonResponse.similarity_mapping;
+            const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            const blobUrl = URL.createObjectURL(blob);
+            const filename = jsonResponse.filename || "standardized_ciq.xlsx";
+            downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
+            aiResponseText = `Standardized CIQ '${filename}' is ready for download.`;
+             if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
+                aiResponseText += `\n\nSome columns were not found in the standard template.`;
             }
+            toast({ title: "Standardization Complete" });
+        } else if (jsonResponse.request_id || jsonResponse.unmatched_columns || jsonResponse.standardized_file_base64) {
+            let debugMessage = "Standardization response from backend is incomplete. ";
+            if (!jsonResponse.standardized_file_base64) debugMessage += "Missing 'standardized_file_base64'. ";
+            if (!jsonResponse.request_id) debugMessage += "Missing 'request_id'. ";
+            if (!jsonResponse.response && !jsonResponse.standardized_file_base64) debugMessage += "Also missing 'response' field for fallback.";
+            aiResponseText = jsonResponse.response || debugMessage.trim();
+             if (jsonResponse.request_id) {
+              isStandardizationReqLocal = true;
+              standardizationReqIdLocal = jsonResponse.request_id;
+              unmatchedColsLocal = jsonResponse.unmatched_columns;
+              simMappingLocal = jsonResponse.similarity_mapping;
+            }
+        }
+         else {
+            aiResponseText = jsonResponse.response || "Received an empty response from the server.";
+        }
         } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
             const blob = await backendResponse.blob();
             const contentDisposition = backendResponse.headers.get('Content-Disposition');
@@ -990,7 +1045,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
                 if (filenameMatch && filenameMatch.length > 1) filename = filenameMatch[1];
             }
             const blobUrl = URL.createObjectURL(blob);
-            downloadableFile = { name: filename, type: blob.type, blobUrl };
+            downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
             aiResponseText = `File '${filename}' is ready for download.`;
             toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.`});
         } else {
@@ -998,7 +1053,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         }
 
         let processedResponseText = aiResponseText;
-        if (selectedModel === 'deepseek-r1' && !downloadableFile && !isStandardizationReq) { 
+        if (selectedModel === 'deepseek-r1' && !downloadableFileLocal && !isStandardizationReqLocal) { 
             processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         }
 
@@ -1009,17 +1064,18 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             sender: 'ai',
             timestamp: Date.now(),
             modelUsed: selectedModel, 
-            downloadableFile: downloadableFile,
-            isStandardizationRequest: isStandardizationReq,
-            standardizationRequestId: standardizationReqId,
-            unmatchedColumns: unmatchedCols,
-            similarityMapping: simMapping,
+            downloadableFile: downloadableFileLocal,
+            isStandardizationRequest: isStandardizationReqLocal,
+            standardizationRequestId: standardizationReqIdLocal,
+            unmatchedColumns: unmatchedColsLocal,
+            similarityMapping: simMappingLocal,
             isStandardizationConfirmed: false,
         };
         
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === currentConvId) {
+                    // Ensure baseMessagesForRegen is used correctly
                     return { ...conv, messages: [...baseMessagesForRegen, newAiMessage], timestamp: Date.now() };
                 }
                 return conv;
@@ -1050,6 +1106,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                  if (conv.id === currentConvId) {
+                    // Ensure baseMessagesForRegen is used correctly for error case too
                     return { ...conv, messages: [...baseMessagesForRegen, errorAiMessage], timestamp: Date.now() };
                 }
                 return conv;
@@ -1080,7 +1137,6 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
         description: result.message || (decision === 'yes' ? "Standard template update initiated." : "No changes made to standard template."),
       });
 
-      // Update the message to hide confirmation buttons
       setConversations(prevConvs =>
         prevConvs.map(conv => {
           if (conv.id === activeConversationId) {
@@ -1484,3 +1540,4 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
     </SidebarProvider>
   );
 }
+
