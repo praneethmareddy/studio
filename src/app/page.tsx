@@ -55,7 +55,7 @@ import { cn } from '@/lib/utils';
 import { isToday, isYesterday, differenceInDays, format } from 'date-fns';
 
 const CONVERSATIONS_STORAGE_KEY = 'genAiConfigGeneratorConversations';
-const STREAM_DELAY_MS = 30; // Adjusted for character-by-character streaming feel
+const STREAM_DELAY_MS = 15; // Adjusted for faster character-by-character streaming feel
 
 const sampleQueriesList = [
   "give me telus ciq",
@@ -191,13 +191,10 @@ export default function ChatPage() {
   }, [conversations, toast]);
 
   useEffect(() => {
-    // This effect handles changes in activeConversationId validity when conversations list changes
     if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
-      // Active ID is no longer valid (e.g., chat deleted), select most recent or null
       const mostRecent = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
       setActiveConversationId(mostRecent ? mostRecent.id : null);
     } else if (conversations.length === 0 && activeConversationId !== null) { 
-      // All conversations deleted, active ID should be null
       setActiveConversationId(null);
     }
   }, [conversations, activeConversationId]);
@@ -217,7 +214,7 @@ export default function ChatPage() {
       });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations]); 
+  }, []); 
 
   const activeConversation = useMemo(() => {
     return conversations.find(conv => conv.id === activeConversationId);
@@ -314,7 +311,7 @@ export default function ChatPage() {
               };
             }
             return conv;
-          })
+          }).sort((a,b) => b.timestamp - a.timestamp)
         );
         charIndex++;
         streamTimeoutRef.current = setTimeout(appendNextCharacter, STREAM_DELAY_MS);
@@ -459,7 +456,7 @@ export default function ChatPage() {
           conv.id === currentConversationId
             ? { ...conv, messages: [...conv.messages, aiMessagePlaceholder], timestamp: Date.now() } 
             : conv
-        )
+        ).sort((a, b) => b.timestamp - a.timestamp)
       );
 
       if (currentConversationId) { 
@@ -535,7 +532,7 @@ export default function ChatPage() {
 
       updatedUserMessage = {
         ...targetConversation.messages[messageIndex],
-        text: trimmedEditingText, // Display text
+        text: trimmedEditingText, 
         timestamp: Date.now(),
       };
 
@@ -555,7 +552,7 @@ export default function ChatPage() {
       return newConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 0)); // Ensure state update before proceeding
+    await new Promise(resolve => setTimeout(resolve, 0)); 
 
     setEditingMessage(null);
     setEditingMessageText('');
@@ -617,11 +614,10 @@ export default function ChatPage() {
       setConversations(prevConvs =>
         prevConvs.map(conv => {
             if (conv.id === currentConvId) {
-                // baseMessagesForNewAIResponse already contains the edited user message
                 return { ...conv, messages: [...baseMessagesForNewAIResponse, aiMessagePlaceholder], timestamp: Date.now() };
             }
             return conv;
-        })
+        }).sort((a, b) => b.timestamp - a.timestamp)
       );
       
       if (currentConvId) {
@@ -650,7 +646,7 @@ export default function ChatPage() {
                 return { ...conv, messages: [...baseMessagesForNewAIResponse, errorAiMessage], timestamp: Date.now() };
             }
             return conv;
-        })
+        }).sort((a, b) => b.timestamp - a.timestamp)
       );
       setIsLoading(false);
     }
@@ -847,7 +843,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
                     return { ...conv, messages: [...baseMessagesForRegen, newAiMessagePlaceholder], timestamp: Date.now() };
                 }
                 return conv;
-            })
+            }).sort((a, b) => b.timestamp - a.timestamp)
         );
         
         if (currentConvId) {
@@ -877,7 +873,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
                     return { ...conv, messages: [...baseMessagesForRegen, errorAiMessage], timestamp: Date.now() };
                 }
                 return conv;
-            })
+            }).sort((a, b) => b.timestamp - a.timestamp)
         );
         setIsLoading(false);
     }
