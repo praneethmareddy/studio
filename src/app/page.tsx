@@ -55,7 +55,7 @@ import { cn } from '@/lib/utils';
 import { isToday, isYesterday, differenceInDays, format } from 'date-fns';
 
 const CONVERSATIONS_STORAGE_KEY = 'genAiConfigGeneratorConversations';
-const STREAM_DELAY_MS = 15; 
+const STREAM_DELAY_MS = 15;
 
 const sampleQueriesList = [
   "give me telus ciq",
@@ -156,10 +156,10 @@ export default function ChatPage() {
           setConversations(loadedConversations);
           const currentActiveIdFromStorage = localStorage.getItem('activeConversationId');
           const isValidId = loadedConversations.find(c => c.id === currentActiveIdFromStorage);
-          
+
           if (currentActiveIdFromStorage && isValidId) {
             setActiveConversationId(currentActiveIdFromStorage);
-          } else if (loadedConversations.length > 0) { 
+          } else if (loadedConversations.length > 0) {
             const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
             setActiveConversationId(mostRecent.id);
           }
@@ -174,7 +174,7 @@ export default function ChatPage() {
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, []);
 
  useEffect(() => {
     if (activeConversationId) {
@@ -202,19 +202,20 @@ export default function ChatPage() {
   }, [conversations, toast]);
 
   useEffect(() => {
-    // This effect ensures activeConversationId remains valid or sensible
-    // if it's null and there are conversations, pick the most recent
-    if (activeConversationId === null && conversations.length > 0) {
-        const mostRecent = [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0];
-        setActiveConversationId(mostRecent.id);
-    } 
-    // if activeConversationId exists but the conversation itself was deleted
-    else if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
-        const mostRecentAfterDeletion = conversations.length > 0 ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0] : null;
+    // This effect ensures activeConversationId remains valid or sensible.
+    // It handles cases like a persisted active ID pointing to a now-deleted conversation,
+    // or the conversations list becoming empty.
+    // It no longer auto-selects a conversation if activeConversationId is null and conversations exist,
+    // to allow the "New Chat" state (activeConversationId === null) to persist.
+
+    if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
+        // Active ID points to a deleted conversation, select the most recent or null.
+        const mostRecentAfterDeletion = conversations.length > 0
+            ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0]
+            : null;
         setActiveConversationId(mostRecentAfterDeletion ? mostRecentAfterDeletion.id : null);
-    }
-    // if conversations are empty, activeId should be null
-    else if (conversations.length === 0 && activeConversationId !== null) {
+    } else if (conversations.length === 0 && activeConversationId !== null) {
+        // All conversations are gone, active ID should be null.
         setActiveConversationId(null);
     }
   }, [conversations, activeConversationId]);
@@ -234,7 +235,7 @@ export default function ChatPage() {
       });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, []);
 
   const activeConversation = useMemo(() => {
     return conversations.find(conv => conv.id === activeConversationId);
@@ -267,7 +268,7 @@ export default function ChatPage() {
         const dateA = new Date(`01 ${a}`);
         const dateB = new Date(`01 ${b}`);
         if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-            return 0; 
+            return 0;
         }
         return dateB.getTime() - dateA.getTime();
       });
@@ -284,7 +285,7 @@ export default function ChatPage() {
 
   const handleNewChat = () => {
     setEditingConversation(null);
-    setActiveConversationId(null); 
+    setActiveConversationId(null);
     setChatInputValue('');
     setEditingMessage(null);
     setAttachedFile(null);
@@ -327,7 +328,7 @@ export default function ChatPage() {
                 messages: conv.messages.map(msg =>
                   msg.id === messageId ? { ...msg, text: currentDisplayedText } : msg
                 ),
-                timestamp: Date.now(), 
+                timestamp: Date.now(),
               };
             }
             return conv;
@@ -338,8 +339,8 @@ export default function ChatPage() {
       } else {
         setIsLoading(false);
         setConversations(prevConvs =>
-            [...prevConvs].map(conv => 
-                conv.id === conversationId ? {...conv, timestamp: Date.now()} : conv 
+            [...prevConvs].map(conv =>
+                conv.id === conversationId ? {...conv, timestamp: Date.now()} : conv
             ).sort((a,b) => b.timestamp - a.timestamp)
         );
       }
@@ -348,7 +349,7 @@ export default function ChatPage() {
   }, []);
 
  const handleSendMessage = useCallback(async (
-    text: string, 
+    text: string,
     file?: File // This is the newly attached file from ChatInput
   ) => {
     const trimmedText = text.trim();
@@ -358,19 +359,17 @@ export default function ChatPage() {
     let fileInfoForUserMessage: Message['file'] | undefined = undefined;
     let messageTextForBackend = trimmedText;
 
-    if (file) { 
+    if (file) {
         fileInfoForUserMessage = { name: file.name, type: file.type, size: file.size };
         if (trimmedText.toLowerCase().includes("standardize this ciq") || trimmedText.toLowerCase().includes("standardize ciq")) {
             messageTextForBackend = "standardize this CIQ"; // Standard query for backend
-            displayMessageText = `Standardizing: ${file.name}`; 
+            displayMessageText = `Standardizing: ${file.name}`;
         } else {
-            // For general file uploads, backend might expect textual reference or just use the file with query
             messageTextForBackend = `[File Attached: ${file.name}] ${trimmedText}`.trim();
         }
     }
-    
-    if (!trimmedText && fileInfoForUserMessage && !messageTextForBackend.toLowerCase().includes("standardize this ciq")) { 
-      // If only a file is attached without text (and not for standardization)
+
+    if (!trimmedText && fileInfoForUserMessage && !messageTextForBackend.toLowerCase().includes("standardize this ciq")) {
       displayMessageText = `File: ${fileInfoForUserMessage.name}`;
       messageTextForBackend = `File: ${fileInfoForUserMessage.name}`;
     }
@@ -380,7 +379,7 @@ export default function ChatPage() {
       text: displayMessageText,
       sender: 'user',
       timestamp: Date.now(),
-      file: fileInfoForUserMessage, // Store metadata of the *newly uploaded* file
+      file: fileInfoForUserMessage,
     };
 
     setIsLoading(true);
@@ -406,31 +405,30 @@ export default function ChatPage() {
     }
     updatedConversations.sort((a, b) => b.timestamp - a.timestamp);
     setConversations(updatedConversations);
-    setChatInputValue(''); 
-    setAttachedFile(null); // Clear the globally attached file from ChatInput
+    setChatInputValue('');
+    setAttachedFile(null);
 
     try {
       let backendResponse;
       const requestOptions: RequestInit = { method: 'POST' };
 
-      if (file) { // If a file was *newly attached* for this message
+      if (file) {
         const formData = new FormData();
         formData.append('file', file, file.name);
-        formData.append('query', messageTextForBackend); // Use the prepared query
+        formData.append('query', messageTextForBackend);
         requestOptions.body = formData;
-        // No 'Content-Type' header for FormData, browser sets it
-      } else { 
+      } else {
         requestOptions.headers = { 'Content-Type': 'application/json' };
         requestOptions.body = JSON.stringify({ query: messageTextForBackend, model: selectedModel });
       }
-      
+
       backendResponse = await fetch('http://localhost:5000/query', requestOptions);
 
       if (!backendResponse.ok) {
         const errorText = await backendResponse.text();
         throw new Error(`HTTP error! status: ${backendResponse.status}, message: ${errorText}`);
       }
-      
+
       const contentType = backendResponse.headers.get("content-type");
       let aiResponseText = "";
       let downloadableFileLocal: Message['downloadableFile'] | undefined = undefined;
@@ -438,6 +436,7 @@ export default function ChatPage() {
       let standardizationReqIdLocal: string | undefined = undefined;
       let unmatchedColsLocal: string[] | undefined = undefined;
       let simMappingLocal: Record<string, string> | undefined = undefined;
+      let filenameForDownload = "downloaded_file";
 
 
       if (contentType && contentType.includes("application/json")) {
@@ -445,25 +444,25 @@ export default function ChatPage() {
         if (jsonResponse.error) {
             throw new Error(jsonResponse.error);
         }
-        
+
         if (jsonResponse.standardized_file_base64 && jsonResponse.request_id) {
             isStandardizationReqLocal = true;
             standardizationReqIdLocal = jsonResponse.request_id;
             unmatchedColsLocal = jsonResponse.unmatched_columns;
             simMappingLocal = jsonResponse.similarity_mapping;
+            filenameForDownload = jsonResponse.filename || "standardized_ciq.xlsx";
 
             const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             const blobUrl = URL.createObjectURL(blob);
-            const filename = jsonResponse.filename || "standardized_ciq.xlsx"; 
-            downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
-            
-            aiResponseText = `Standardized CIQ '${filename}' is ready for download.`;
+            downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+
+            aiResponseText = `Standardized CIQ '${filenameForDownload}' is ready for download.`;
             if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
                 aiResponseText += `\n\nSome columns were not found in the standard template. You'll be asked if you want to update the template.`;
             } else {
                 aiResponseText += `\n\nAll columns matched the standard template.`;
             }
-            toast({ title: "Standardization Complete", description: `'${filename}' is ready.` });
+            toast({ title: "Standardization Complete", description: `'${filenameForDownload}' is ready.` });
         } else if (jsonResponse.request_id || jsonResponse.unmatched_columns || jsonResponse.standardized_file_base64) {
             let debugMessage = "Standardization response from backend is incomplete. ";
             if (!jsonResponse.standardized_file_base64) debugMessage += "Missing 'standardized_file_base64'. ";
@@ -472,47 +471,51 @@ export default function ChatPage() {
             console.warn("Incomplete standardization JSON from backend:", jsonResponse);
             aiResponseText = jsonResponse.response || debugMessage.trim();
             if (jsonResponse.request_id) {
-              isStandardizationReqLocal = true; 
+              isStandardizationReqLocal = true;
               standardizationReqIdLocal = jsonResponse.request_id;
               unmatchedColsLocal = jsonResponse.unmatched_columns;
               simMappingLocal = jsonResponse.similarity_mapping;
+              filenameForDownload = jsonResponse.filename || "standardized_ciq.xlsx"; // Use filename if provided
+               if (jsonResponse.standardized_file_base64) { // Still create downloadable if base64 is there
+                    const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                    const blobUrl = URL.createObjectURL(blob);
+                    downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+                }
             }
         }
-        else { // Regular text response
+        else {
             aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
       } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
-        // This case handles direct file downloads not part of standardization JSON (e.g., backend directly sends file)
         const blob = await backendResponse.blob();
         const contentDisposition = backendResponse.headers.get('Content-Disposition');
-        let filename = "downloaded_file"; 
-        if (contentType.includes("spreadsheetml.sheet")) filename += ".xlsx";
+        if (contentType.includes("spreadsheetml.sheet") && !filenameForDownload.endsWith(".xlsx")) filenameForDownload += ".xlsx";
 
         if (contentDisposition) {
             const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
             if (filenameMatch && filenameMatch.length > 1) {
-                filename = filenameMatch[1];
+                filenameForDownload = filenameMatch[1];
             }
         }
-        
+
         const blobUrl = URL.createObjectURL(blob);
-        downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
-        aiResponseText = `File '${filename}' is ready for download. Successfully downloaded '${filename}'.`;
-        toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.` });
+        downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+        aiResponseText = `Successfully downloaded '${filenameForDownload}'.`;
+        toast({ title: "File Ready", description: `'${filenameForDownload}' can now be downloaded from the chat.` });
       } else {
         aiResponseText = await backendResponse.text();
         if (!aiResponseText) aiResponseText = "Received an unexpected response type from the server.";
       }
-      
+
       let processedResponseText = aiResponseText;
       if (selectedModel === 'deepseek-r1' && !downloadableFileLocal && !isStandardizationReqLocal) {
         processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
       }
 
-      const newAiMessageId = (Date.now() + 1).toString(); 
+      const newAiMessageId = (Date.now() + 1).toString();
       const aiMessagePlaceholder: Message = {
         id: newAiMessageId,
-        text: '', 
+        text: '',
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
@@ -521,22 +524,22 @@ export default function ChatPage() {
         standardizationRequestId: standardizationReqIdLocal,
         unmatchedColumns: unmatchedColsLocal,
         similarityMapping: simMappingLocal,
-        isStandardizationConfirmed: false, // Initially false for new requests
+        isStandardizationConfirmed: false,
       };
 
       setConversations(prevConvs =>
         prevConvs.map(conv =>
           conv.id === currentConversationId
-            ? { ...conv, messages: [...conv.messages, aiMessagePlaceholder], timestamp: Date.now() } 
+            ? { ...conv, messages: [...conv.messages, aiMessagePlaceholder], timestamp: Date.now() }
             : conv
         ).sort((a, b) => b.timestamp - a.timestamp)
       );
 
-      if (currentConversationId) { 
+      if (currentConversationId) {
          streamResponseText(processedResponseText, newAiMessageId, currentConversationId);
       } else {
         console.error("Error: No active conversation ID to stream response to.");
-        setIsLoading(false); 
+        setIsLoading(false);
       }
 
     } catch (error: any) {
@@ -558,7 +561,7 @@ export default function ChatPage() {
           conv.id === currentConversationId
             ? { ...conv, messages: [...conv.messages, errorAiMessage], timestamp: Date.now() }
             : conv
-        ).sort((a, b) => b.timestamp - a.timestamp) 
+        ).sort((a, b) => b.timestamp - a.timestamp)
       );
       setIsLoading(false);
     }
@@ -567,45 +570,36 @@ export default function ChatPage() {
   const handleStartEditMessage = (message: Message) => {
     setEditingMessage(message);
     setEditingMessageText(message.text);
-    setAttachedFile(null); // Clear any globally attached file when starting an edit
+    setAttachedFile(null);
   };
 
  const handleSaveEditedMessage = async () => {
     if (!editingMessage || !activeConversationId) return;
 
     const trimmedEditingText = editingMessageText.trim();
-    // An edited message must have text, even if the original only had a file.
-    // If the original had a file and user clears text, they should probably delete or send new.
-    // For simplicity, we'll require some text on edit if the goal is to get a new AI response.
-    if (!trimmedEditingText) { 
+    if (!trimmedEditingText) {
       toast({ title: "Cannot resend empty message", description: "Please provide some text for the edited message.", variant: "destructive" });
       return;
     }
 
-    const currentConvId = activeConversationId; 
+    const currentConvId = activeConversationId;
 
     let textForBackend = trimmedEditingText;
     let displayUserText = trimmedEditingText;
 
-    // If the ORIGINAL message being edited had a file, we include a reference to it in textForBackend
-    // The backend will treat this as a text query; it won't re-process the original file bytes unless a new file is attached.
     if (editingMessage.file) {
         if (trimmedEditingText.toLowerCase().includes("standardize this ciq") || trimmedEditingText.toLowerCase().includes("standardize ciq")) {
-            textForBackend = "standardize this CIQ"; // Keep it simple for backend
-            // This will be a text-only request to backend. If backend requires a file for this query, it might error or ask for one.
-            // The current frontend sends this as JSON, so backend's `if 'file' in request.files` will be false.
-            // For true re-standardization of the *original* file on edit, user would need to re-attach, or backend needs more complex state.
+            textForBackend = "standardize this CIQ";
             displayUserText = `Standardizing (edited): ${editingMessage.file.name} - ${trimmedEditingText}`;
         } else {
             textForBackend = `[File Referenced: ${editingMessage.file.name}] ${trimmedEditingText}`.trim();
-            displayUserText = textForBackend; // Display what's sent
+            displayUserText = textForBackend;
         }
     }
-    
+
     let updatedUserMessage: Message | null = null;
     let baseMessagesForNewAIResponse: Message[] = [];
 
-    // Update the user message in place and truncate subsequent messages
     setConversations(prevConvs => {
       const convIndex = prevConvs.findIndex(conv => conv.id === currentConvId);
       if (convIndex === -1) return prevConvs;
@@ -614,7 +608,6 @@ export default function ChatPage() {
       const messageIndex = targetConversation.messages.findIndex(msg => msg.id === editingMessage.id);
       if (messageIndex === -1) return prevConvs;
 
-      // Clean up blobUrls for AI messages that will be removed
       for (let i = messageIndex + 1; i < targetConversation.messages.length; i++) {
         if (targetConversation.messages[i].downloadableFile?.blobUrl) {
           URL.revokeObjectURL(targetConversation.messages[i].downloadableFile.blobUrl);
@@ -623,47 +616,41 @@ export default function ChatPage() {
 
       updatedUserMessage = {
         ...targetConversation.messages[messageIndex],
-        text: displayUserText, // Use the display text which might reference the file
+        text: displayUserText,
         timestamp: Date.now(),
-        // Keep original file info IF it existed. It's just metadata now for display.
-        file: editingMessage.file 
+        file: editingMessage.file
       };
-      
+
       baseMessagesForNewAIResponse = [
         ...targetConversation.messages.slice(0, messageIndex),
-        updatedUserMessage, 
+        updatedUserMessage,
       ];
-      
+
       const updatedConv = {
         ...targetConversation,
-        messages: baseMessagesForNewAIResponse, 
-        timestamp: Date.now(), // Update conversation timestamp
+        messages: baseMessagesForNewAIResponse,
+        timestamp: Date.now(),
       };
-      
+
       const newConvs = [...prevConvs];
       newConvs[convIndex] = updatedConv;
       return newConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
-    
-    // Ensure state update has propagated before proceeding
-    await new Promise(resolve => setTimeout(resolve, 0)); 
 
-    setEditingMessage(null); // Clear editing state
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    setEditingMessage(null);
     setEditingMessageText('');
     setIsLoading(true);
     toast({ title: "Resending edited message..." });
 
     try {
-      // For edits, we always send a JSON request. The backend will not receive file bytes.
-      // If the 'textForBackend' implies a file operation (like "standardize this CIQ"),
-      // the backend needs to handle the absence of `request.files` gracefully.
       const requestOptions: RequestInit = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: textForBackend, model: selectedModel }),
       };
-      
-      console.log("Resending edited message with options:", requestOptions); // Debug log
+      console.log("Resending edited message with options:", requestOptions);
 
       const backendResponse = await fetch('http://localhost:5000/query', requestOptions);
 
@@ -679,6 +666,8 @@ export default function ChatPage() {
       let standardizationReqIdLocal: string | undefined = undefined;
       let unmatchedColsLocal: string[] | undefined = undefined;
       let simMappingLocal: Record<string, string> | undefined = undefined;
+      let filenameForDownload = "downloaded_file";
+
 
       if (contentType && contentType.includes("application/json")) {
         const jsonResponse = await backendResponse.json();
@@ -689,11 +678,11 @@ export default function ChatPage() {
             standardizationReqIdLocal = jsonResponse.request_id;
             unmatchedColsLocal = jsonResponse.unmatched_columns;
             simMappingLocal = jsonResponse.similarity_mapping;
+            filenameForDownload = jsonResponse.filename || "standardized_ciq.xlsx";
             const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             const blobUrl = URL.createObjectURL(blob);
-            const filename = jsonResponse.filename || "standardized_ciq.xlsx";
-            downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
-            aiResponseText = `Standardized CIQ '${filename}' is ready for download.`;
+            downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+            aiResponseText = `Standardized CIQ '${filenameForDownload}' is ready for download.`;
             if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
                 aiResponseText += `\n\nSome columns were not found in the standard template. You'll be asked if you want to update.`;
             } else {
@@ -708,29 +697,33 @@ export default function ChatPage() {
             console.warn("Incomplete standardization JSON from backend (on edit):", jsonResponse);
             aiResponseText = jsonResponse.response || debugMessage.trim();
             if (jsonResponse.request_id) {
-              isStandardizationReqLocal = true; 
+              isStandardizationReqLocal = true;
               standardizationReqIdLocal = jsonResponse.request_id;
               unmatchedColsLocal = jsonResponse.unmatched_columns;
               simMappingLocal = jsonResponse.similarity_mapping;
+              filenameForDownload = jsonResponse.filename || "standardized_ciq.xlsx";
+               if (jsonResponse.standardized_file_base64) {
+                    const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                    const blobUrl = URL.createObjectURL(blob);
+                    downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+                }
             }
         }
-         else { // Regular text response
+         else {
             aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
       } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
-        // This path for edits is less likely if backend sends standardization via JSON, but kept for robustness
         const blob = await backendResponse.blob();
         const contentDisposition = backendResponse.headers.get('Content-Disposition');
-        let filename = "downloaded_file";
-        if (contentType.includes("spreadsheetml.sheet")) filename += ".xlsx";
+        if (contentType.includes("spreadsheetml.sheet") && !filenameForDownload.endsWith(".xlsx")) filenameForDownload += ".xlsx";
         if (contentDisposition) {
           const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
-          if (filenameMatch && filenameMatch.length > 1) filename = filenameMatch[1];
+          if (filenameMatch && filenameMatch.length > 1) filenameForDownload = filenameMatch[1];
         }
         const blobUrl = URL.createObjectURL(blob);
-        downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
-        aiResponseText = `File '${filename}' is ready for download.`;
-        toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.`});
+        downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+        aiResponseText = `Successfully downloaded '${filenameForDownload}'.`;
+        toast({ title: "File Ready", description: `'${filenameForDownload}' can now be downloaded from the chat.`});
       } else {
         aiResponseText = await backendResponse.text() || "Received an unexpected response type.";
       }
@@ -743,7 +736,7 @@ export default function ChatPage() {
       const newAiMessageId = (Date.now() + 1).toString();
       const newAiMessage: Message = {
         id: newAiMessageId,
-        text: '', 
+        text: '',
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
@@ -752,24 +745,22 @@ export default function ChatPage() {
         standardizationRequestId: standardizationReqIdLocal,
         unmatchedColumns: unmatchedColsLocal,
         similarityMapping: simMappingLocal,
-        isStandardizationConfirmed: false, // New AI response, confirmation reset
+        isStandardizationConfirmed: false,
       };
 
-      // Append the new AI message to the (already truncated) conversation
       setConversations(prevConvs =>
         prevConvs.map(conv => {
             if (conv.id === currentConvId) {
-                // baseMessagesForNewAIResponse already contains the edited user message
                 return { ...conv, messages: [...baseMessagesForNewAIResponse, newAiMessage], timestamp: Date.now() };
             }
             return conv;
         }).sort((a, b) => b.timestamp - a.timestamp)
       );
-      
+
       if (currentConvId) {
         streamResponseText(processedResponseText, newAiMessageId, currentConvId);
       } else {
-         setIsLoading(false); // Should not happen if currentConvId was valid before
+         setIsLoading(false);
       }
 
     } catch (error: any) {
@@ -786,7 +777,6 @@ export default function ChatPage() {
         timestamp: Date.now(),
         modelUsed: selectedModel,
       };
-      // Append error AI message to the (already truncated) conversation
       setConversations(prevConvs =>
         prevConvs.map(conv => {
              if (conv.id === currentConvId) {
@@ -816,7 +806,6 @@ export default function ChatPage() {
           if (conv.id === activeConversationId) {
             const messageIndex = conv.messages.findIndex(msg => msg.id === messageId);
             if (messageIndex !== -1) {
-              // Clean up blobUrls for all messages being removed
               const messagesToClean = conv.messages.slice(messageIndex);
               messagesToClean.forEach(msgToClean => {
                   if (msgToClean.downloadableFile?.blobUrl) {
@@ -827,19 +816,15 @@ export default function ChatPage() {
               return {
                 ...conv,
                 messages: updatedMessages,
-                // Update timestamp if messages remain, otherwise keep old (or let deleteConversation handle if it becomes empty)
-                timestamp: updatedMessages.length > 0 ? Date.now() : conv.timestamp 
+                timestamp: updatedMessages.length > 0 ? Date.now() : conv.timestamp
               };
             }
           }
           return conv;
-        }).filter(conv => { 
-            // This filter might be too aggressive if a convo becomes empty due to message deletion.
-            // It's better to let users explicitly delete empty conversations.
-            // For now, keep convos even if messages array becomes empty via this action.
-            return true; 
+        }).filter(conv => {
+            return true;
          })
-         .sort((a,b) => b.timestamp - a.timestamp) // Re-sort after potential timestamp updates
+         .sort((a,b) => b.timestamp - a.timestamp)
         );
         toast({ title: "Message and subsequent messages deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
@@ -866,15 +851,12 @@ export default function ChatPage() {
   };
 
   const handleDownloadAIMessage = (messageId: string) => {
-    // This generic download is primarily for text content.
-    // File downloads from AI (like standardized CIQs) are handled by buttons directly on ChatMessage.
     const conversation = conversations.find(c => c.id === activeConversationId);
     const message = conversation?.messages.find(m => m.id === messageId && m.sender === 'ai');
-    
+
     if (message?.downloadableFile?.blobUrl && message.text.includes(message.downloadableFile.name)) {
-        // If it's a file-centric AI message, prompt to use its dedicated download button.
         toast({title: "Info", description: `Use the download button for '${message.downloadableFile.name}' on the message itself.`});
-    } else if (message?.text) { // Download plain text if no specific downloadable file or if it's primarily a text message
+    } else if (message?.text) {
       const blob = new Blob([message.text], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -903,12 +885,11 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         const currentConversationForRegen = prevConvs[convIndex];
         const aiMessageIndex = currentConversationForRegen.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
 
-        if (aiMessageIndex <= 0) { 
+        if (aiMessageIndex <= 0) {
             toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
             return prevConvs;
         }
-        
-        // Clean up blobUrl for the AI message being regenerated, if any
+
         if (currentConversationForRegen.messages[aiMessageIndex]?.downloadableFile?.blobUrl) {
             URL.revokeObjectURL(currentConversationForRegen.messages[aiMessageIndex].downloadableFile.blobUrl);
         }
@@ -918,45 +899,41 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             toast({ title: "Error", description: "Cannot regenerate. Preceding message is not from user.", variant: "destructive" });
             return prevConvs;
         }
-        
-        // Truncate messages up to and including the prompting user message
-        baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex -1); 
+
+        baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex -1);
         baseMessagesForRegen.push(promptingUserMessage);
 
 
         const updatedConvs = [...prevConvs];
         updatedConvs[convIndex] = {
             ...currentConversationForRegen,
-            messages: baseMessagesForRegen, // Set messages to only those up to the user prompt
-            timestamp: Date.now(), // Update conversation timestamp
+            messages: baseMessagesForRegen,
+            timestamp: Date.now(),
         };
         return updatedConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
-    
-    await new Promise(resolve => setTimeout(resolve, 0)); // Ensure state update before proceeding
-    
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
     if (!promptingUserMessage || !currentConvId) {
-        // This should not happen if the above logic is correct
         setIsLoading(false);
         return;
     }
 
     setIsLoading(true);
     toast({ title: "Regenerating AI response..." });
-    
+
     let queryTextForBackend = promptingUserMessage.text;
     const requestOptions: RequestInit = { method: 'POST' };
 
-    // For regeneration, if the original user message involved a file,
-    // the queryTextForBackend should already reflect that (e.g., "Standardizing: file.xlsx" or "[File Attached: file.xlsx] text").
-    // We will send a JSON request. The backend must handle this contextually if it needs file bytes (which it won't receive here).
     if (promptingUserMessage.file) {
-        // queryTextForBackend is already prepared from promptingUserMessage.text
-        // Example: if original was "standardize this ciq" with a file, promptingUserMessage.text is "Standardizing: file.name"
-        // If it was a generic file query, text is "[File Attached: file.name] actual_query"
-        // The backend's `if 'file' in request.files` will be false.
+      // For regeneration, if the original user message had a file,
+      // the backend will treat this as a text query, it won't re-process the file bytes.
+      // The `queryTextForBackend` (which is `promptingUserMessage.text`) should already
+      // contain necessary textual reference to the file like "Standardizing: file.xlsx"
+      // or "[File Attached: file.name] actual_query_text".
     }
-    
+
     requestOptions.headers = { 'Content-Type': 'application/json' };
     requestOptions.body = JSON.stringify({ query: queryTextForBackend, model: selectedModel });
 
@@ -968,7 +945,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             const errorData = await backendResponse.text();
             throw new Error(`HTTP error! status: ${backendResponse.status}, message: ${errorData}`);
         }
-        
+
         const contentType = backendResponse.headers.get("content-type");
         let aiResponseText = "";
         let downloadableFileLocal: Message['downloadableFile'] | undefined = undefined;
@@ -976,23 +953,23 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         let standardizationReqIdLocal: string | undefined = undefined;
         let unmatchedColsLocal: string[] | undefined = undefined;
         let simMappingLocal: Record<string, string> | undefined = undefined;
+        let filenameForDownload = "downloaded_file";
 
 
       if (contentType && contentType.includes("application/json")) {
         const jsonResponse = await backendResponse.json();
         if (jsonResponse.error) throw new Error(jsonResponse.error);
-        
+
         if (jsonResponse.standardized_file_base64 && jsonResponse.request_id) {
-            // This path might be hit if the regenerated query was for standardization
             isStandardizationReqLocal = true;
             standardizationReqIdLocal = jsonResponse.request_id;
             unmatchedColsLocal = jsonResponse.unmatched_columns;
             simMappingLocal = jsonResponse.similarity_mapping;
+            filenameForDownload = jsonResponse.filename || "standardized_ciq.xlsx";
             const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             const blobUrl = URL.createObjectURL(blob);
-            const filename = jsonResponse.filename || "standardized_ciq.xlsx";
-            downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
-            aiResponseText = `Standardized CIQ '${filename}' is ready for download.`;
+            downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+            aiResponseText = `Standardized CIQ '${filenameForDownload}' is ready for download.`;
              if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
                 aiResponseText += `\n\nSome columns were not found in the standard template. You'll be asked if you want to update.`;
             } else {
@@ -1011,60 +988,62 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
               standardizationReqIdLocal = jsonResponse.request_id;
               unmatchedColsLocal = jsonResponse.unmatched_columns;
               simMappingLocal = jsonResponse.similarity_mapping;
+              filenameForDownload = jsonResponse.filename || "standardized_ciq.xlsx";
+               if (jsonResponse.standardized_file_base64) {
+                    const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                    const blobUrl = URL.createObjectURL(blob);
+                    downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+                }
             }
         }
-         else { // Regular text response
+         else {
             aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
         } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
-            // Direct file download response
             const blob = await backendResponse.blob();
             const contentDisposition = backendResponse.headers.get('Content-Disposition');
-            let filename = "downloaded_file";
-            if (contentType.includes("spreadsheetml.sheet")) filename += ".xlsx";
+             if (contentType.includes("spreadsheetml.sheet") && !filenameForDownload.endsWith(".xlsx")) filenameForDownload += ".xlsx";
             if (contentDisposition) {
                 const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
-                if (filenameMatch && filenameMatch.length > 1) filename = filenameMatch[1];
+                if (filenameMatch && filenameMatch.length > 1) filenameForDownload = filenameMatch[1];
             }
             const blobUrl = URL.createObjectURL(blob);
-            downloadableFileLocal = { name: filename, type: blob.type, blobUrl };
-            aiResponseText = `File '${filename}' is ready for download.`;
-            toast({ title: "File Ready", description: `'${filename}' can now be downloaded from the chat.`});
+            downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+            aiResponseText = `Successfully downloaded '${filenameForDownload}'.`;
+            toast({ title: "File Ready", description: `'${filenameForDownload}' can now be downloaded from the chat.`});
         } else {
             aiResponseText = await backendResponse.text() || "Received an unexpected response type.";
         }
 
         let processedResponseText = aiResponseText;
-        if (selectedModel === 'deepseek-r1' && !downloadableFileLocal && !isStandardizationReqLocal) { 
+        if (selectedModel === 'deepseek-r1' && !downloadableFileLocal && !isStandardizationReqLocal) {
             processedResponseText = processedResponseText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         }
 
-        const newAiMessageId = (Date.now() + 1).toString(); 
+        const newAiMessageId = (Date.now() + 1).toString();
         const newAiMessage: Message = {
             id: newAiMessageId,
-            text: '', 
+            text: '',
             sender: 'ai',
             timestamp: Date.now(),
-            modelUsed: selectedModel, 
+            modelUsed: selectedModel,
             downloadableFile: downloadableFileLocal,
             isStandardizationRequest: isStandardizationReqLocal,
             standardizationRequestId: standardizationReqIdLocal,
             unmatchedColumns: unmatchedColsLocal,
             similarityMapping: simMappingLocal,
-            isStandardizationConfirmed: false, // Reset for new AI response
+            isStandardizationConfirmed: false,
         };
-        
-        // Append the new AI message to baseMessagesForRegen
+
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === currentConvId) {
-                    // baseMessagesForRegen already contains the prompting user message
                     return { ...conv, messages: [...baseMessagesForRegen, newAiMessage], timestamp: Date.now() };
                 }
                 return conv;
             }).sort((a, b) => b.timestamp - a.timestamp)
         );
-        
+
         if (currentConvId) {
           streamResponseText(processedResponseText, newAiMessageId, currentConvId);
         } else {
@@ -1084,9 +1063,8 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
           text: `Sorry, I couldn't regenerate the response. ${error.message || 'Please try again.'}`,
           sender: 'ai',
           timestamp: Date.now(),
-          modelUsed: selectedModel, 
+          modelUsed: selectedModel,
         };
-        // Append error AI message to baseMessagesForRegen
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                  if (conv.id === currentConvId) {
@@ -1110,7 +1088,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
       });
 
       if (!response.ok) {
-        const errorData = await response.json(); // Assuming error response is JSON
+        const errorData = await response.json();
         throw new Error(errorData.error || `Failed to confirm update: ${response.status}`);
       }
 
@@ -1120,7 +1098,6 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
         description: result.message || (decision === 'yes' ? "Standard template update initiated." : "No changes made to standard template."),
       });
 
-      // Update the message to reflect confirmation
       setConversations(prevConvs =>
         prevConvs.map(conv => {
           if (conv.id === activeConversationId) {
@@ -1128,10 +1105,10 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
               ...conv,
               messages: conv.messages.map(msg =>
                 msg.id === messageId
-                  ? { ...msg, isStandardizationConfirmed: true, timestamp: Date.now() } // Update timestamp of message
+                  ? { ...msg, isStandardizationConfirmed: true, timestamp: Date.now() }
                   : msg
               ),
-              timestamp: Date.now(), // Update conversation timestamp
+              timestamp: Date.now(),
             };
           }
           return conv;
@@ -1171,9 +1148,9 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
     if (!editingConversation) return;
     setConversations(prev => prev.map(conv =>
       conv.id === editingConversation.id
-        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } // Update timestamp on title edit
+        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() }
         : conv
-    ).sort((a,b) => b.timestamp - a.timestamp)); 
+    ).sort((a,b) => b.timestamp - a.timestamp));
     setEditingConversation(null);
     setEditingConversationTitleText('');
     toast({ title: "Conversation title updated" });
@@ -1191,7 +1168,6 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
       description: "Are you sure you want to delete this entire conversation? This action cannot be undone.",
       onConfirm: () => {
         setConversations(prevConversations => {
-            // Clean up blobUrls for the conversation being deleted
             const convToDelete = prevConversations.find(c => c.id === conversationId);
             convToDelete?.messages.forEach(msg => {
                 if (msg.downloadableFile?.blobUrl) {
@@ -1200,16 +1176,15 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
             });
 
             const newConversations = prevConversations.filter(conv => conv.id !== conversationId);
-            if (activeConversationId === conversationId) { // If deleting active conversation
+            if (activeConversationId === conversationId) {
                 if (newConversations.length > 0) {
-                    // Select the most recent remaining conversation
                     const mostRecent = [...newConversations].sort((a, b) => b.timestamp - a.timestamp)[0];
                     setActiveConversationId(mostRecent.id);
                 } else {
-                    setActiveConversationId(null); // No conversations left
+                    setActiveConversationId(null);
                 }
             }
-            return newConversations; // No need to re-sort here, filter preserves order or sort happens in useEffect
+            return newConversations;
         });
         toast({ title: "Conversation deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
@@ -1224,7 +1199,6 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
       title: "Delete All Chats?",
       description: "Are you sure you want to delete all your conversations? This action cannot be undone and will clear all chat history.",
       onConfirm: () => {
-        // Clean up all blobUrls
         conversations.forEach(conv => {
             conv.messages.forEach(msg => {
                 if (msg.downloadableFile?.blobUrl) {
@@ -1232,8 +1206,8 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
                 }
             });
         });
-        setConversations([]); 
-        setActiveConversationId(null); 
+        setConversations([]);
+        setActiveConversationId(null);
         toast({ title: "All conversations deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
       },
@@ -1420,7 +1394,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
         <div className={cn("flex flex-col h-screen bg-background text-foreground", isLoading && "animate-shadow-pulse")}>
           <header className="flex items-center justify-between p-4 shadow-sm border-b border-border">
             <div className="flex items-center">
-              <div className="md:hidden mr-2"> 
+              <div className="md:hidden mr-2">
                 <SidebarTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Open sidebar">
                     <PanelLeft className="h-5 w-5" />
