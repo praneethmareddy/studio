@@ -160,8 +160,10 @@ export default function ChatPage() {
           if (currentActiveIdFromStorage && isValidId) {
             setActiveConversationId(currentActiveIdFromStorage);
           } else if (loadedConversations.length > 0) {
-            const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
-            setActiveConversationId(mostRecent.id);
+            // Do not auto-select if activeConversationId is explicitly null (e.g. New Chat)
+            // This was previously auto-selecting, which prevented "New Chat" from working correctly.
+            // const mostRecent = [...loadedConversations].sort((a,b) => b.timestamp - a.timestamp)[0];
+            // setActiveConversationId(mostRecent.id);
           }
         }
       }
@@ -202,22 +204,17 @@ export default function ChatPage() {
   }, [conversations, toast]);
 
   useEffect(() => {
-    // This effect ensures activeConversationId remains valid or sensible.
-    // It handles cases like a persisted active ID pointing to a now-deleted conversation,
-    // or the conversations list becoming empty.
-    // It no longer auto-selects a conversation if activeConversationId is null and conversations exist,
-    // to allow the "New Chat" state (activeConversationId === null) to persist.
-
     if (activeConversationId && !conversations.find(c => c.id === activeConversationId)) {
-        // Active ID points to a deleted conversation, select the most recent or null.
         const mostRecentAfterDeletion = conversations.length > 0
             ? [...conversations].sort((a, b) => b.timestamp - a.timestamp)[0]
             : null;
         setActiveConversationId(mostRecentAfterDeletion ? mostRecentAfterDeletion.id : null);
     } else if (conversations.length === 0 && activeConversationId !== null) {
-        // All conversations are gone, active ID should be null.
         setActiveConversationId(null);
     }
+  // This useEffect intentionally does not automatically select a conversation
+  // if activeConversationId is null and conversations exist, to allow the "New Chat"
+  // state (activeConversationId === null) to persist.
   }, [conversations, activeConversationId]);
 
 
@@ -328,7 +325,7 @@ export default function ChatPage() {
                 messages: conv.messages.map(msg =>
                   msg.id === messageId ? { ...msg, text: currentDisplayedText } : msg
                 ),
-                timestamp: Date.now(),
+                timestamp: Date.now(), // Ensure conversation with streaming text bubbles up
               };
             }
             return conv;
@@ -338,6 +335,7 @@ export default function ChatPage() {
         streamTimeoutRef.current = setTimeout(appendNextCharacter, STREAM_DELAY_MS);
       } else {
         setIsLoading(false);
+        // Final update to ensure timestamp is set and list is sorted correctly after streaming
         setConversations(prevConvs =>
             [...prevConvs].map(conv =>
                 conv.id === conversationId ? {...conv, timestamp: Date.now()} : conv
@@ -415,8 +413,9 @@ export default function ChatPage() {
       if (file) {
         const formData = new FormData();
         formData.append('file', file, file.name);
-        formData.append('query', messageTextForBackend);
+        formData.append('query', messageTextForBackend); // Ensure query is also sent with file
         requestOptions.body = formData;
+        // For FormData, Content-Type is set by the browser
       } else {
         requestOptions.headers = { 'Content-Type': 'application/json' };
         requestOptions.body = JSON.stringify({ query: messageTextForBackend, model: selectedModel });
@@ -470,7 +469,7 @@ export default function ChatPage() {
             if (!jsonResponse.response && !jsonResponse.standardized_file_base64) debugMessage += "Also missing 'response' field for a fallback message.";
             console.warn("Incomplete standardization JSON from backend:", jsonResponse);
             aiResponseText = jsonResponse.response || debugMessage.trim();
-            if (jsonResponse.request_id) {
+            if (jsonResponse.request_id) { // Still try to process if some standardization info is present
               isStandardizationReqLocal = true;
               standardizationReqIdLocal = jsonResponse.request_id;
               unmatchedColsLocal = jsonResponse.unmatched_columns;
@@ -483,10 +482,11 @@ export default function ChatPage() {
                 }
             }
         }
-        else {
+        else { // Standard text response
             aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
       } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
+        // This case handles direct file download if backend ever sends it (not the base64 JSON way)
         const blob = await backendResponse.blob();
         const contentDisposition = backendResponse.headers.get('Content-Disposition');
         if (contentType.includes("spreadsheetml.sheet") && !filenameForDownload.endsWith(".xlsx")) filenameForDownload += ".xlsx";
@@ -500,7 +500,7 @@ export default function ChatPage() {
 
         const blobUrl = URL.createObjectURL(blob);
         downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
-        aiResponseText = `Successfully downloaded '${filenameForDownload}'.`;
+        aiResponseText = `Successfully downloaded '${filenameForDownload}'.`; // This text will be shown in chat
         toast({ title: "File Ready", description: `'${filenameForDownload}' can now be downloaded from the chat.` });
       } else {
         aiResponseText = await backendResponse.text();
@@ -515,7 +515,7 @@ export default function ChatPage() {
       const newAiMessageId = (Date.now() + 1).toString();
       const aiMessagePlaceholder: Message = {
         id: newAiMessageId,
-        text: '',
+        text: '', // Will be filled by streamResponseText
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
@@ -524,7 +524,7 @@ export default function ChatPage() {
         standardizationRequestId: standardizationReqIdLocal,
         unmatchedColumns: unmatchedColsLocal,
         similarityMapping: simMappingLocal,
-        isStandardizationConfirmed: false,
+        isStandardizationConfirmed: false, // Default to false
       };
 
       setConversations(prevConvs =>
@@ -538,6 +538,7 @@ export default function ChatPage() {
       if (currentConversationId) {
          streamResponseText(processedResponseText, newAiMessageId, currentConversationId);
       } else {
+        // This case should ideally not happen if a new conversation is created above
         console.error("Error: No active conversation ID to stream response to.");
         setIsLoading(false);
       }
@@ -570,7 +571,7 @@ export default function ChatPage() {
   const handleStartEditMessage = (message: Message) => {
     setEditingMessage(message);
     setEditingMessageText(message.text);
-    setAttachedFile(null);
+    setAttachedFile(null); // Clear any globally attached file when starting an edit
   };
 
  const handleSaveEditedMessage = async () => {
@@ -587,10 +588,12 @@ export default function ChatPage() {
     let textForBackend = trimmedEditingText;
     let displayUserText = trimmedEditingText;
 
+    // If the original message being edited had a file, include a reference.
+    // The backend is expected to handle this as a text query, not re-process file bytes.
     if (editingMessage.file) {
         if (trimmedEditingText.toLowerCase().includes("standardize this ciq") || trimmedEditingText.toLowerCase().includes("standardize ciq")) {
-            textForBackend = "standardize this CIQ";
-            displayUserText = `Standardizing (edited): ${editingMessage.file.name} - ${trimmedEditingText}`;
+            textForBackend = "standardize this CIQ"; // Keep it standard for backend
+            displayUserText = `Standardizing (edited): ${editingMessage.file.name} - ${trimmedEditingText}`; // For UI display
         } else {
             textForBackend = `[File Referenced: ${editingMessage.file.name}] ${trimmedEditingText}`.trim();
             displayUserText = textForBackend;
@@ -600,14 +603,16 @@ export default function ChatPage() {
     let updatedUserMessage: Message | null = null;
     let baseMessagesForNewAIResponse: Message[] = [];
 
+    // Update conversation state: replace user message, remove subsequent messages
     setConversations(prevConvs => {
       const convIndex = prevConvs.findIndex(conv => conv.id === currentConvId);
-      if (convIndex === -1) return prevConvs;
+      if (convIndex === -1) return prevConvs; // Should not happen
 
       const targetConversation = prevConvs[convIndex];
       const messageIndex = targetConversation.messages.findIndex(msg => msg.id === editingMessage.id);
-      if (messageIndex === -1) return prevConvs;
+      if (messageIndex === -1) return prevConvs; // Should not happen
 
+      // Revoke blob URLs for messages being removed
       for (let i = messageIndex + 1; i < targetConversation.messages.length; i++) {
         if (targetConversation.messages[i].downloadableFile?.blobUrl) {
           URL.revokeObjectURL(targetConversation.messages[i].downloadableFile.blobUrl);
@@ -616,11 +621,12 @@ export default function ChatPage() {
 
       updatedUserMessage = {
         ...targetConversation.messages[messageIndex],
-        text: displayUserText,
+        text: displayUserText, // Use the display text for the user message
         timestamp: Date.now(),
-        file: editingMessage.file
+        file: editingMessage.file // Retain original file info if any
       };
 
+      // Messages up to and including the edited user message
       baseMessagesForNewAIResponse = [
         ...targetConversation.messages.slice(0, messageIndex),
         updatedUserMessage,
@@ -637,6 +643,7 @@ export default function ChatPage() {
       return newConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
 
+    // Ensure state update completes before proceeding
     await new Promise(resolve => setTimeout(resolve, 0));
 
     setEditingMessage(null);
@@ -645,10 +652,12 @@ export default function ChatPage() {
     toast({ title: "Resending edited message..." });
 
     try {
+      // For edited messages, always send as JSON, even if original had a file.
+      // The backend should use textForBackend (which includes file reference if needed)
       const requestOptions: RequestInit = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: textForBackend, model: selectedModel }),
+        body: JSON.stringify({ query: textForBackend, model: selectedModel }), // Use textForBackend
       };
       console.log("Resending edited message with options:", requestOptions);
 
@@ -674,14 +683,17 @@ export default function ChatPage() {
         if (jsonResponse.error) throw new Error(jsonResponse.error);
 
         if (jsonResponse.standardized_file_base64 && jsonResponse.request_id) {
+            // This block handles the new CIQ standardization flow
             isStandardizationReqLocal = true;
             standardizationReqIdLocal = jsonResponse.request_id;
             unmatchedColsLocal = jsonResponse.unmatched_columns;
             simMappingLocal = jsonResponse.similarity_mapping;
             filenameForDownload = jsonResponse.filename || "standardized_ciq.xlsx";
+
             const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             const blobUrl = URL.createObjectURL(blob);
             downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+
             aiResponseText = `Standardized CIQ '${filenameForDownload}' is ready for download.`;
             if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
                 aiResponseText += `\n\nSome columns were not found in the standard template. You'll be asked if you want to update.`;
@@ -709,13 +721,15 @@ export default function ChatPage() {
                 }
             }
         }
-         else {
+         else { // Standard text response
             aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
       } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
+        // Direct file download (not base64 in JSON)
         const blob = await backendResponse.blob();
         const contentDisposition = backendResponse.headers.get('Content-Disposition');
         if (contentType.includes("spreadsheetml.sheet") && !filenameForDownload.endsWith(".xlsx")) filenameForDownload += ".xlsx";
+
         if (contentDisposition) {
           const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
           if (filenameMatch && filenameMatch.length > 1) filenameForDownload = filenameMatch[1];
@@ -736,7 +750,7 @@ export default function ChatPage() {
       const newAiMessageId = (Date.now() + 1).toString();
       const newAiMessage: Message = {
         id: newAiMessageId,
-        text: '',
+        text: '', // Will be filled by streamResponseText
         sender: 'ai',
         timestamp: Date.now(),
         modelUsed: selectedModel,
@@ -748,9 +762,11 @@ export default function ChatPage() {
         isStandardizationConfirmed: false,
       };
 
+      // Append new AI message to the (already truncated) conversation
       setConversations(prevConvs =>
         prevConvs.map(conv => {
             if (conv.id === currentConvId) {
+                // baseMessagesForNewAIResponse already contains the edited user message
                 return { ...conv, messages: [...baseMessagesForNewAIResponse, newAiMessage], timestamp: Date.now() };
             }
             return conv;
@@ -760,6 +776,7 @@ export default function ChatPage() {
       if (currentConvId) {
         streamResponseText(processedResponseText, newAiMessageId, currentConvId);
       } else {
+         // This should not happen due to the logic above
          setIsLoading(false);
       }
 
@@ -806,6 +823,7 @@ export default function ChatPage() {
           if (conv.id === activeConversationId) {
             const messageIndex = conv.messages.findIndex(msg => msg.id === messageId);
             if (messageIndex !== -1) {
+              // Revoke blob URLs for deleted messages and subsequent ones
               const messagesToClean = conv.messages.slice(messageIndex);
               messagesToClean.forEach(msgToClean => {
                   if (msgToClean.downloadableFile?.blobUrl) {
@@ -813,15 +831,19 @@ export default function ChatPage() {
                   }
               });
               const updatedMessages = conv.messages.slice(0, messageIndex);
+              // If deleting the only messages, consider if the conversation itself should be deleted or kept empty.
+              // For now, it keeps the conversation, potentially empty.
               return {
                 ...conv,
                 messages: updatedMessages,
-                timestamp: updatedMessages.length > 0 ? Date.now() : conv.timestamp
+                timestamp: updatedMessages.length > 0 ? Date.now() : conv.timestamp // Update timestamp if messages remain
               };
             }
           }
           return conv;
         }).filter(conv => {
+            // Optionally remove conversation if it becomes empty
+            // if (conv.id === activeConversationId && conv.messages.length === 0) return false;
             return true;
          })
          .sort((a,b) => b.timestamp - a.timestamp)
@@ -854,9 +876,11 @@ export default function ChatPage() {
     const conversation = conversations.find(c => c.id === activeConversationId);
     const message = conversation?.messages.find(m => m.id === messageId && m.sender === 'ai');
 
+    // If there's a specific downloadable file, users should use its dedicated button
     if (message?.downloadableFile?.blobUrl && message.text.includes(message.downloadableFile.name)) {
         toast({title: "Info", description: `Use the download button for '${message.downloadableFile.name}' on the message itself.`});
     } else if (message?.text) {
+      // Otherwise, download the AI's text content as a .txt file
       const blob = new Blob([message.text], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -878,6 +902,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     let promptingUserMessage: Message | undefined;
     let baseMessagesForRegen: Message[] = [];
 
+    // Update conversation state: remove the AI message to be regenerated and any subsequent messages
     setConversations(prevConvs => {
         const convIndex = prevConvs.findIndex(c => c.id === currentConvId);
         if (convIndex === -1) return prevConvs;
@@ -885,13 +910,16 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         const currentConversationForRegen = prevConvs[convIndex];
         const aiMessageIndex = currentConversationForRegen.messages.findIndex(msg => msg.id === aiMessageIdToRegenerate && msg.sender === 'ai');
 
-        if (aiMessageIndex <= 0) {
+        if (aiMessageIndex <= 0) { // AI message must exist and have a preceding user message
             toast({ title: "Error", description: "Cannot regenerate. No preceding user prompt found.", variant: "destructive" });
             return prevConvs;
         }
 
-        if (currentConversationForRegen.messages[aiMessageIndex]?.downloadableFile?.blobUrl) {
-            URL.revokeObjectURL(currentConversationForRegen.messages[aiMessageIndex].downloadableFile.blobUrl);
+        // Revoke blob URL for the AI message being regenerated and any subsequent messages
+        for (let i = aiMessageIndex; i < currentConversationForRegen.messages.length; i++) {
+             if (currentConversationForRegen.messages[i].downloadableFile?.blobUrl) {
+                URL.revokeObjectURL(currentConversationForRegen.messages[i].downloadableFile.blobUrl);
+            }
         }
 
         promptingUserMessage = currentConversationForRegen.messages[aiMessageIndex - 1];
@@ -900,22 +928,25 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             return prevConvs;
         }
 
+        // Messages up to (and including) the user message that prompted the AI response
         baseMessagesForRegen = currentConversationForRegen.messages.slice(0, aiMessageIndex -1);
-        baseMessagesForRegen.push(promptingUserMessage);
+        baseMessagesForRegen.push(promptingUserMessage); // include the user prompt
 
 
         const updatedConvs = [...prevConvs];
         updatedConvs[convIndex] = {
             ...currentConversationForRegen,
-            messages: baseMessagesForRegen,
+            messages: baseMessagesForRegen, // Truncate here
             timestamp: Date.now(),
         };
         return updatedConvs.sort((a, b) => b.timestamp - a.timestamp);
     });
 
+    // Ensure state update completes before proceeding
     await new Promise(resolve => setTimeout(resolve, 0));
 
     if (!promptingUserMessage || !currentConvId) {
+        // This should not happen if the above logic is correct
         setIsLoading(false);
         return;
     }
@@ -923,16 +954,16 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
     setIsLoading(true);
     toast({ title: "Regenerating AI response..." });
 
+    // Prepare the query for the backend using the text from the promptingUserMessage
     let queryTextForBackend = promptingUserMessage.text;
     const requestOptions: RequestInit = { method: 'POST' };
 
-    if (promptingUserMessage.file) {
-      // For regeneration, if the original user message had a file,
-      // the backend will treat this as a text query, it won't re-process the file bytes.
-      // The `queryTextForBackend` (which is `promptingUserMessage.text`) should already
-      // contain necessary textual reference to the file like "Standardizing: file.xlsx"
-      // or "[File Attached: file.name] actual_query_text".
-    }
+    // For regeneration, if the original user message had a file,
+    // the backend will treat this as a text query, it won't re-process the file bytes.
+    // The queryTextForBackend (which is promptingUserMessage.text) should already
+    // contain necessary textual reference to the file like "Standardizing: file.xlsx"
+    // or "[File Attached: file.name] actual_query_text".
+    // No need to construct FormData here for regeneration.
 
     requestOptions.headers = { 'Content-Type': 'application/json' };
     requestOptions.body = JSON.stringify({ query: queryTextForBackend, model: selectedModel });
@@ -942,10 +973,11 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         const backendResponse = await fetch('http://localhost:5000/query', requestOptions);
 
         if (!backendResponse.ok) {
-            const errorData = await backendResponse.text();
+            const errorData = await backendResponse.text(); // or .json() if backend sends structured errors
             throw new Error(`HTTP error! status: ${backendResponse.status}, message: ${errorData}`);
         }
 
+        // Process response (similar to handleSendMessage)
         const contentType = backendResponse.headers.get("content-type");
         let aiResponseText = "";
         let downloadableFileLocal: Message['downloadableFile'] | undefined = undefined;
@@ -961,14 +993,17 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         if (jsonResponse.error) throw new Error(jsonResponse.error);
 
         if (jsonResponse.standardized_file_base64 && jsonResponse.request_id) {
+            // Handle new CIQ standardization flow
             isStandardizationReqLocal = true;
             standardizationReqIdLocal = jsonResponse.request_id;
             unmatchedColsLocal = jsonResponse.unmatched_columns;
             simMappingLocal = jsonResponse.similarity_mapping;
             filenameForDownload = jsonResponse.filename || "standardized_ciq.xlsx";
+
             const blob = base64ToBlob(jsonResponse.standardized_file_base64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             const blobUrl = URL.createObjectURL(blob);
             downloadableFileLocal = { name: filenameForDownload, type: blob.type, blobUrl };
+
             aiResponseText = `Standardized CIQ '${filenameForDownload}' is ready for download.`;
              if (unmatchedColsLocal && unmatchedColsLocal.length > 0) {
                 aiResponseText += `\n\nSome columns were not found in the standard template. You'll be asked if you want to update.`;
@@ -996,13 +1031,15 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
                 }
             }
         }
-         else {
+         else { // Standard text response
             aiResponseText = jsonResponse.response || "Received an empty response from the server.";
         }
         } else if (contentType && (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") || contentType.includes("application/octet-stream"))) {
+            // Direct file download
             const blob = await backendResponse.blob();
             const contentDisposition = backendResponse.headers.get('Content-Disposition');
              if (contentType.includes("spreadsheetml.sheet") && !filenameForDownload.endsWith(".xlsx")) filenameForDownload += ".xlsx";
+
             if (contentDisposition) {
                 const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
                 if (filenameMatch && filenameMatch.length > 1) filenameForDownload = filenameMatch[1];
@@ -1023,7 +1060,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         const newAiMessageId = (Date.now() + 1).toString();
         const newAiMessage: Message = {
             id: newAiMessageId,
-            text: '',
+            text: '', // Will be filled by streamResponseText
             sender: 'ai',
             timestamp: Date.now(),
             modelUsed: selectedModel,
@@ -1035,9 +1072,11 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
             isStandardizationConfirmed: false,
         };
 
+        // Append the new AI message to the (already truncated) conversation
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                 if (conv.id === currentConvId) {
+                    // baseMessagesForRegen already contains the prompting user message
                     return { ...conv, messages: [...baseMessagesForRegen, newAiMessage], timestamp: Date.now() };
                 }
                 return conv;
@@ -1047,6 +1086,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         if (currentConvId) {
           streamResponseText(processedResponseText, newAiMessageId, currentConvId);
         } else {
+             // This should not happen
              console.error("Error: No active conversation ID to stream regenerated response to.");
              setIsLoading(false);
         }
@@ -1068,6 +1108,7 @@ const handleRegenerateAIMessage = async (aiMessageIdToRegenerate: string) => {
         setConversations(prevConvs =>
             prevConvs.map(conv => {
                  if (conv.id === currentConvId) {
+                    // Append error message to the already truncated list
                     return { ...conv, messages: [...baseMessagesForRegen, errorAiMessage], timestamp: Date.now() };
                 }
                 return conv;
@@ -1088,7 +1129,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json(); // Assuming backend sends JSON error
         throw new Error(errorData.error || `Failed to confirm update: ${response.status}`);
       }
 
@@ -1098,6 +1139,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
         description: result.message || (decision === 'yes' ? "Standard template update initiated." : "No changes made to standard template."),
       });
 
+      // Update the message to reflect that confirmation has been handled
       setConversations(prevConvs =>
         prevConvs.map(conv => {
           if (conv.id === activeConversationId) {
@@ -1105,10 +1147,10 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
               ...conv,
               messages: conv.messages.map(msg =>
                 msg.id === messageId
-                  ? { ...msg, isStandardizationConfirmed: true, timestamp: Date.now() }
+                  ? { ...msg, isStandardizationConfirmed: true, timestamp: Date.now() } // Update timestamp of message
                   : msg
               ),
-              timestamp: Date.now(),
+              timestamp: Date.now(), // Update timestamp of conversation
             };
           }
           return conv;
@@ -1129,10 +1171,12 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
 
 
   const handleLikeAIMessage = (messageId: string) => {
+    // Placeholder for like functionality
     toast({ title: "Message Liked!", description: `AI Message ID: ${messageId}` });
   };
 
   const handleDislikeAIMessage = (messageId: string) => {
+    // Placeholder for dislike functionality
     toast({ title: "Message Disliked.", description: `AI Message ID: ${messageId}` });
   };
 
@@ -1140,7 +1184,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
     setEditingConversation(conversation);
     setEditingConversationTitleText(conversation.title);
     if (activeConversationId !== conversation.id) {
-       setActiveConversationId(conversation.id);
+       setActiveConversationId(conversation.id); // Switch to the conversation being edited if not active
     }
   };
 
@@ -1148,9 +1192,9 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
     if (!editingConversation) return;
     setConversations(prev => prev.map(conv =>
       conv.id === editingConversation.id
-        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() }
+        ? { ...conv, title: editingConversationTitleText, timestamp: Date.now() } // Update timestamp
         : conv
-    ).sort((a,b) => b.timestamp - a.timestamp));
+    ).sort((a,b) => b.timestamp - a.timestamp)); // Re-sort after update
     setEditingConversation(null);
     setEditingConversationTitleText('');
     toast({ title: "Conversation title updated" });
@@ -1168,6 +1212,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
       description: "Are you sure you want to delete this entire conversation? This action cannot be undone.",
       onConfirm: () => {
         setConversations(prevConversations => {
+            // Revoke blob URLs for all messages in the conversation being deleted
             const convToDelete = prevConversations.find(c => c.id === conversationId);
             convToDelete?.messages.forEach(msg => {
                 if (msg.downloadableFile?.blobUrl) {
@@ -1177,14 +1222,15 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
 
             const newConversations = prevConversations.filter(conv => conv.id !== conversationId);
             if (activeConversationId === conversationId) {
+                // If the active conversation is deleted, select the most recent remaining one, or null
                 if (newConversations.length > 0) {
                     const mostRecent = [...newConversations].sort((a, b) => b.timestamp - a.timestamp)[0];
                     setActiveConversationId(mostRecent.id);
                 } else {
-                    setActiveConversationId(null);
+                    setActiveConversationId(null); // No conversations left
                 }
             }
-            return newConversations;
+            return newConversations; // No need to re-sort here as filter preserves order
         });
         toast({ title: "Conversation deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
@@ -1199,6 +1245,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
       title: "Delete All Chats?",
       description: "Are you sure you want to delete all your conversations? This action cannot be undone and will clear all chat history.",
       onConfirm: () => {
+        // Revoke all blob URLs before clearing conversations
         conversations.forEach(conv => {
             conv.messages.forEach(msg => {
                 if (msg.downloadableFile?.blobUrl) {
@@ -1207,7 +1254,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
             });
         });
         setConversations([]);
-        setActiveConversationId(null);
+        setActiveConversationId(null); // No active conversation after deleting all
         toast({ title: "All conversations deleted" });
         setAlertDialogState(prev => ({ ...prev, isOpen: false }));
       },
@@ -1216,6 +1263,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
     });
   };
 
+  // Determine if sample queries should be shown
   const displaySampleQueries = !activeConversation || (activeConversation.messages && activeConversation.messages.length === 0);
 
   return (
@@ -1232,10 +1280,10 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
                   <span className="text-sm font-medium text-muted-foreground whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:opacity-0">
                     GenAI Config Generator
                   </span>
-                  <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
+                  <PanelLeft className="h-4 w-4 text-sidebar-foreground" />
                 </div>
                 <div className="hidden items-center justify-center group-data-[collapsible=icon]:flex">
-                   <PanelLeft className="h-[1.2rem] w-[1.2rem] text-sidebar-foreground" />
+                   <PanelLeft className="h-4 w-4 text-sidebar-foreground" />
                 </div>
                 <span className="sr-only">Toggle Sidebar</span>
               </Button>
@@ -1249,7 +1297,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
               className="w-full flex items-center justify-start text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-lg group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-start hover:animate-shadow-pulse"
               title="New Chat"
             >
-              <SquarePen size={16} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
+              <SquarePen size={14} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
               <span className="ml-2 whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:ml-0">
                 New Chat
               </span>
@@ -1262,7 +1310,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
               <Input
                 type="search"
                 placeholder="Search chats..."
-                className="w-full h-9 pl-10 pr-3 text-sm bg-input border-input focus:ring-ring"
+                className="w-full h-8 pl-10 pr-3 text-sm bg-input border-input focus:ring-ring"
                 value={sidebarSearchTerm}
                 onChange={(e) => setSidebarSearchTerm(e.target.value)}
               />
@@ -1270,7 +1318,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 text-muted-foreground hover:text-foreground"
                   onClick={() => setSidebarSearchTerm('')}
                 >
                   <X size={14} />
@@ -1319,8 +1367,8 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
                             className="h-8 flex-grow bg-input text-foreground border-border focus:ring-ring"
                             autoFocus
                           />
-                          <Button variant="ghost" size="icon" onClick={handleSaveEditedConversationTitle} className="h-8 w-8 text-primary hover:text-primary/80"><Save size={16}/></Button>
-                          <Button variant="ghost" size="icon" onClick={handleCancelEditConversationTitle} className="h-8 w-8 text-destructive hover:text-destructive/80"><X size={16}/></Button>
+                          <Button variant="ghost" size="icon" onClick={handleSaveEditedConversationTitle} className="h-8 w-8 text-primary hover:text-primary/80"><Save size={14}/></Button>
+                          <Button variant="ghost" size="icon" onClick={handleCancelEditConversationTitle} className="h-8 w-8 text-destructive hover:text-destructive/80"><X size={14}/></Button>
                         </div>
                       ) : (
                         <>
@@ -1331,7 +1379,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
                             className="flex-grow overflow-hidden group-data-[collapsible=icon]:justify-center min-w-0"
                           >
                             <div className="flex items-center gap-2 overflow-hidden">
-                              <MessageSquare size={16} className="text-muted-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
+                              <MessageSquare size={14} className="text-muted-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[collapsible=icon]:text-foreground flex-shrink-0" />
                               <span className="truncate group-data-[collapsible=icon]:hidden">{conv.title || 'New Chat'}</span>
                             </div>
                           </SidebarMenuButton>
@@ -1345,7 +1393,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
                                   className="h-6 w-6 opacity-0 group-hover/conv-item:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground group-data-[[data-active=true]]/conv-item:text-inherit group-data-[[data-active=true]]/conv-item:hover:text-inherit/80"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <MoreHorizontal size={16} />
+                                  <MoreHorizontal size={14} />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start">
@@ -1373,7 +1421,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
             tooltip={{ children: "Delete All Chats", side: 'right', align: 'center' }}
             className="w-full group-data-[collapsible=icon]:justify-center text-destructive hover:!bg-destructive/10 hover:!text-destructive focus:!text-destructive focus-visible:!text-destructive"
           >
-            <Trash2 size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
+            <Trash2 size={16} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
             <span className="truncate group-data-[collapsible=icon]:hidden">
               Delete All Chats
             </span>
@@ -1382,7 +1430,7 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
             tooltip={{ children: "User Profile", side: 'right', align: 'center' }}
             className="w-full group-data-[collapsible=icon]:justify-center"
           >
-            <User size={18} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
+            <User size={16} className="flex-shrink-0 group-data-[collapsible=icon]:mx-auto" />
             <span className="truncate group-data-[collapsible=icon]:hidden">
               User Profile
             </span>
@@ -1397,19 +1445,19 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
               <div className="md:hidden mr-2">
                 <SidebarTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Open sidebar">
-                    <PanelLeft className="h-5 w-5" />
+                    <PanelLeft className="h-4 w-4" />
                   </Button>
                 </SidebarTrigger>
               </div>
-               {selectedModel === 'llama3' && <Cpu size={20} className="mr-2 text-primary" />}
-               {selectedModel === 'deepseek-r1' && <Brain size={20} className="mr-2 text-primary" />}
-              <h1 className="text-lg md:text-xl font-semibold text-foreground">GenAI Config Generator</h1>
-              {selectedModel === 'llama3' && <Image src="/robo1.gif" alt="Llama 3 Robot" width={30} height={30} className="ml-2" unoptimized={true} />}
-              {selectedModel === 'deepseek-r1' && <Image src="/robo2.gif" alt="Deepseek Robot" width={30} height={30} className="ml-2" unoptimized={true} />}
+               {selectedModel === 'llama3' && <Cpu size={18} className="mr-2 text-primary" />}
+               {selectedModel === 'deepseek-r1' && <Brain size={18} className="mr-2 text-primary" />}
+              <h1 className="text-base md:text-lg font-semibold text-foreground">GenAI Config Generator</h1>
+              {selectedModel === 'llama3' && <Image src="/robo1.gif" alt="Llama 3 Robot" width={26} height={26} className="ml-2" unoptimized={true} />}
+              {selectedModel === 'deepseek-r1' && <Image src="/robo2.gif" alt="Deepseek Robot" width={26} height={26} className="ml-2" unoptimized={true} />}
             </div>
             <div className="flex items-center gap-2">
               <Select value={selectedModel} onValueChange={setSelectedModel}>
-                <SelectTrigger className="w-[150px] h-9 text-sm hover:shadow-md transition-shadow duration-300 ease-in-out">
+                <SelectTrigger className="w-[140px] h-8 text-sm hover:shadow-md transition-shadow duration-300 ease-in-out">
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1502,4 +1550,3 @@ const handleStandardizationConfirmation = async (messageId: string, requestId: s
     </SidebarProvider>
   );
 }
-

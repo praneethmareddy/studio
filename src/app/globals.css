@@ -34,7 +34,7 @@
     --input: 220 15% 92%; /* Input background color */
     --ring: 217 91% 65%; /* Ring color for focus states */
 
-    --radius: 0.75rem; /* Increased from 0.5rem for a more modern feel */
+    --radius: 0.5rem; /* Reduced from 0.75rem for a sharper look */
 
     --chart-1: 217 91% 60%;
     --chart-2: 210 70% 65%;
@@ -87,7 +87,7 @@
     --input: 215 28% 17%;
     --ring: 217 91% 65%;
 
-    --radius: 0.75rem; /* Increased from 0.5rem */
+    --radius: 0.5rem; /* Reduced from 0.75rem */
 
     --chart-1: 217 91% 60%;
     --chart-2: 210 70% 65%;
@@ -168,4 +168,3 @@
   0%, 100% { opacity: 0.2; transform: scale(0.8); }
   50% { opacity: 1; transform: scale(1.2); }
 }
-

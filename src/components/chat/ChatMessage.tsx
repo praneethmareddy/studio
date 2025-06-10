@@ -26,7 +26,7 @@ interface ChatMessageProps {
 }
 
 const markdownComponents = {
-  pre: ({node, ...props}: any) => <pre className="bg-black/20 dark:bg-white/10 p-3 my-2 rounded-md overflow-x-auto text-sm leading-relaxed" {...props} />,
+  pre: ({node, ...props}: any) => <pre className="bg-black/20 dark:bg-white/10 p-2 my-1.5 rounded-md overflow-x-auto text-xs leading-relaxed" {...props} />,
   code({node, inline, className, children, ...props}: any) {
     const match = /language-(\w+)/.exec(className || '');
     const codeString = Array.isArray(children) ? children.join('') : String(children);
@@ -35,19 +35,19 @@ const markdownComponents = {
         {codeString}
       </code>
     ) : ( 
-      <code className={cn(className, "bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded text-sm font-mono")} {...props}>
+      <code className={cn(className, "bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded text-xs font-mono")} {...props}>
         {children}
       </code>
     );
   },
-  p: ({node, ...props}: any) => <p className="text-inherit mb-2 last:mb-0" {...props} />,
-  ul: ({node, ...props}: any) => <ul className="list-disc pl-5 mb-2 text-inherit" {...props} />,
-  ol: ({node, ...props}: any) => <ol className="list-decimal pl-5 mb-2 text-inherit" {...props} />,
-  li: ({node, ...props}: any) => <li className="mb-1 text-inherit" {...props} />,
+  p: ({node, ...props}: any) => <p className="text-inherit mb-1.5 last:mb-0" {...props} />,
+  ul: ({node, ...props}: any) => <ul className="list-disc pl-4 mb-1.5 text-inherit" {...props} />,
+  ol: ({node, ...props}: any) => <ol className="list-decimal pl-4 mb-1.5 text-inherit" {...props} />,
+  li: ({node, ...props}: any) => <li className="mb-0.5 text-inherit" {...props} />,
   a: ({node, ...props}: any) => <a className="text-primary underline hover:text-primary/80" {...props} />,
-  h1: ({node, ...props}: any) => <h1 className="text-2xl font-bold my-2 text-inherit" {...props} />,
-  h2: ({node, ...props}: any) => <h2 className="text-xl font-semibold my-2 text-inherit" {...props} />,
-  h3: ({node, ...props}: any) => <h3 className="text-lg font-semibold my-1.5 text-inherit" {...props} />,
+  h1: ({node, ...props}: any) => <h1 className="text-xl font-bold my-1.5 text-inherit" {...props} />,
+  h2: ({node, ...props}: any) => <h2 className="text-lg font-semibold my-1.5 text-inherit" {...props} />,
+  h3: ({node, ...props}: any) => <h3 className="text-base font-semibold my-1 text-inherit" {...props} />,
 };
 
 const modelDisplayNames: { [key: string]: string } = {
@@ -87,10 +87,10 @@ export function ChatMessage({
           <Button
             variant="ghost"
             size="icon"
-            className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", className)}
+            className={cn("h-6 w-6 text-muted-foreground hover:text-foreground", className)}
             onClick={onClick}
           >
-            <Icon size={16} />
+            <Icon size={14} />
           </Button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
@@ -108,31 +108,30 @@ export function ChatMessage({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      // URL.revokeObjectURL(message.downloadableFile.blobUrl); // Consider revoking later or on component unmount
     }
   };
 
   return (
     <div
       className={cn(
-        'group/message flex items-end gap-2 my-1 py-1', 
+        'group/message flex items-end gap-1.5 my-1 py-1', 
         isUser ? 'justify-end' : 'justify-start'
       )}
     >
       {!isUser && (
-        <Avatar className="h-8 w-8 flex-shrink-0 self-start mt-1">
+        <Avatar className="h-7 w-7 flex-shrink-0 self-start mt-1">
           <AvatarFallback className="bg-primary text-primary-foreground">
-            {message.modelUsed === 'llama3' && <Cpu size={20} />}
-            {message.modelUsed === 'deepseek-r1' && <Brain size={20} />}
-            {(!message.modelUsed || (message.modelUsed !== 'llama3' && message.modelUsed !== 'deepseek-r1')) && <Bot size={20} />}
+            {message.modelUsed === 'llama3' && <Cpu size={18} />}
+            {message.modelUsed === 'deepseek-r1' && <Brain size={18} />}
+            {(!message.modelUsed || (message.modelUsed !== 'llama3' && message.modelUsed !== 'deepseek-r1')) && <Bot size={18} />}
           </AvatarFallback>
         </Avatar>
       )}
       
-      <div className={cn("flex items-end gap-1.5", isUser ? "flex-row-reverse" : "flex-row")}>
+      <div className={cn("flex items-end gap-1", isUser ? "flex-row-reverse" : "flex-row")}>
         <div
           className={cn(
-            'max-w-[75%] rounded-lg flex flex-col transition-shadow duration-300 ease-in-out hover:shadow-xl shadow-md',
+            'max-w-[75%] rounded-lg flex flex-col transition-shadow duration-300 ease-in-out hover:shadow-lg shadow-sm', // Reduced shadow
              isUser 
                ? 'bg-primary text-primary-foreground rounded-br-none' 
                : 'bg-card text-card-foreground rounded-bl-none'
@@ -140,13 +139,13 @@ export function ChatMessage({
         >
           {message.file && (
              <div className={cn(
-                "px-3 pt-3 pb-1.5", 
+                "px-2.5 pt-2 pb-1", 
                 isUser ? "text-primary-foreground/90" : "text-card-foreground/90",
               )}>
-              <div className="flex items-center gap-2 text-xs">
-                <FileText size={16} className={cn(isUser ? "text-primary-foreground/80" : "text-muted-foreground")} />
+              <div className="flex items-center gap-1.5 text-xs">
+                <FileText size={14} className={cn(isUser ? "text-primary-foreground/80" : "text-muted-foreground")} />
                 <span className="truncate font-medium">{message.file.name}</span>
-                <span className={cn("ml-auto text-xs", isUser ? "text-primary-foreground/70" : "text-muted-foreground/80")}>
+                <span className={cn("ml-auto text-[10px]", isUser ? "text-primary-foreground/70" : "text-muted-foreground/80")}>
                   ({(message.file.size / 1024).toFixed(1)} KB)
                 </span>
               </div>
@@ -155,13 +154,13 @@ export function ChatMessage({
 
           {((message.file && message.text && message.text.trim() !== '') || (message.file && message.isStandardizationRequest)) && (
             <hr className={cn(
-              "mx-3 my-1.5 border-t", 
+              "mx-2.5 my-1 border-t", 
               isUser ? "border-primary-foreground/30" : "border-card-foreground/20"
             )} />
           )}
           
           {message.text && message.text.trim() !== '' && (
-            <div className={cn("px-3 py-2 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
+            <div className={cn("px-2.5 py-1.5 text-sm", isUser ? "text-primary-foreground" : "text-card-foreground" )}>
               {isUser ? (
                 <span className="whitespace-pre-wrap">{message.text}</span>
               ) : (
@@ -172,47 +171,48 @@ export function ChatMessage({
             </div>
           )}
 
-          {/* Standardization Confirmation UI */}
           {!isUser && message.isStandardizationRequest && !message.isStandardizationConfirmed && message.unmatchedColumns && message.unmatchedColumns.length > 0 && (
-            <Card className="m-2 border-dashed border-primary/50 bg-primary/5 dark:bg-primary/10">
-              <CardHeader className="pb-2 pt-3 px-3">
-                <CardTitle className="text-sm flex items-center">
-                  <AlertTriangle size={16} className="mr-2 text-primary/80" />
+            <Card className="m-1.5 border-dashed border-primary/50 bg-primary/5 dark:bg-primary/10">
+              <CardHeader className="pb-1.5 pt-2 px-2.5">
+                <CardTitle className="text-xs flex items-center">
+                  <AlertTriangle size={14} className="mr-1.5 text-primary/80" />
                   Template Update
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-xs px-3 pb-2 pt-0">
+              <CardContent className="text-[11px] px-2.5 pb-1.5 pt-0">
                 {message.unmatchedColumns && message.unmatchedColumns.length > 0 && (
-                  <div className="mb-2">
-                    <p className="font-semibold mb-1">Unmatched columns found:</p>
-                    <ul className="list-disc list-inside pl-2 max-h-20 overflow-y-auto bg-background/30 p-1 rounded">
+                  <div className="mb-1.5">
+                    <p className="font-semibold mb-0.5">Unmatched columns found:</p>
+                    <ul className="list-disc list-inside pl-1.5 max-h-16 overflow-y-auto bg-background/30 p-1 rounded text-[10px]">
                       {message.unmatchedColumns.map(col => <li key={col}>{col}</li>)}
                     </ul>
                   </div>
                 )}
                 {message.similarityMapping && Object.keys(message.similarityMapping).length > 0 && (
-                  <div className="mb-2">
-                    <p className="font-semibold mb-1">Suggested Mappings:</p>
-                     <ul className="list-none pl-2 max-h-20 overflow-y-auto bg-background/30 p-1 rounded">
+                  <div className="mb-1.5">
+                    <p className="font-semibold mb-0.5">Suggested Mappings:</p>
+                     <ul className="list-none pl-1.5 max-h-16 overflow-y-auto bg-background/30 p-1 rounded text-[10px]">
                       {Object.entries(message.similarityMapping).map(([key, value]) => (
                         <li key={key}>{key} → {value || <span className="italic text-muted-foreground">No match</span>}</li>
                       ))}
                     </ul>
                   </div>
                 )}
-                <p className="mb-2">Do you want to update the standard CIQ template with these columns?</p>
+                <p className="mb-1.5">Do you want to update the standard CIQ template with these columns?</p>
               </CardContent>
-              <CardFooter className="flex justify-end gap-2 px-3 pb-3 pt-0">
+              <CardFooter className="flex justify-end gap-1.5 px-2.5 pb-2 pt-0">
                 <Button 
                   variant="outline" 
                   size="sm" 
                   onClick={() => message.standardizationRequestId && onConfirmStandardization(message.id, message.standardizationRequestId, 'no')}
+                  className="h-7 px-2 text-xs"
                 >
                   No
                 </Button>
                 <Button 
                   size="sm" 
                   onClick={() => message.standardizationRequestId && onConfirmStandardization(message.id, message.standardizationRequestId, 'yes')}
+                  className="h-7 px-2 text-xs"
                 >
                   Yes, Update
                 </Button>
@@ -220,28 +220,27 @@ export function ChatMessage({
             </Card>
           )}
           
-          {/* Downloadable File Button */}
           {message.downloadableFile && !isUser && (
-             <div className={cn("px-3 pb-2", message.isStandardizationRequest && !message.isStandardizationConfirmed && message.unmatchedColumns && message.unmatchedColumns.length > 0 ? "pt-0" : "pt-1")}>
-               { (message.text && message.text.trim() !== '') && !message.isStandardizationRequest && // Only show hr if there's text and it's not part of standardization card
-                 <hr className={cn( "my-2 border-t", "border-card-foreground/20")} />
+             <div className={cn("px-2.5 pb-1.5", message.isStandardizationRequest && !message.isStandardizationConfirmed && message.unmatchedColumns && message.unmatchedColumns.length > 0 ? "pt-0" : "pt-1")}>
+               { (message.text && message.text.trim() !== '') && !message.isStandardizationRequest && 
+                 <hr className={cn( "my-1.5 border-t", "border-card-foreground/20")} />
                }
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleFileDownload}
-                className="w-full text-card-foreground hover:bg-accent/80"
+                className="w-full text-card-foreground hover:bg-accent/80 h-8 text-xs"
               >
-                <Download size={14} className="mr-2" />
+                <Download size={14} className="mr-1.5" />
                 Download {message.downloadableFile.name}
               </Button>
             </div>
           )}
 
           {(message.timestamp || (!isUser && modelUsedLabel)) && (
-            <div className="flex items-center self-end px-3 pb-1.5 pt-0 text-[11px] leading-tight opacity-80">
+            <div className="flex items-center self-end px-2.5 pb-1 pt-0 text-[10px] leading-tight opacity-80">
               {!isUser && modelUsedLabel && (
-                <span className="mr-2">via {modelUsedLabel}</span>
+                <span className="mr-1.5">via {modelUsedLabel}</span>
               )}
               {message.timestamp && (
                 <span className={cn(isUser ? 'text-primary-foreground/70' : 'text-muted-foreground/90')}>
@@ -252,7 +251,7 @@ export function ChatMessage({
           )}
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-0.5 opacity-0 group-hover/message:opacity-100 focus-within:opacity-100 transition-opacity duration-200 mb-1 self-center">
+        <div className="flex flex-col sm:flex-row items-center gap-0.5 opacity-0 group-hover/message:opacity-100 focus-within:opacity-100 transition-opacity duration-200 mb-0.5 self-center">
           {isUser && (
             <>
               <ActionButton onClick={() => onCopyUserMessage(message.text)} icon={Copy} tooltipText="Copy Text" />
@@ -260,7 +259,7 @@ export function ChatMessage({
               <ActionButton onClick={onDelete} icon={Trash2} tooltipText="Delete" className="hover:text-destructive text-destructive/80" />
             </>
           )}
-          {!isUser && !message.isStandardizationRequest && ( // Standard actions for non-standardization AI messages
+          {!isUser && !message.isStandardizationRequest && ( 
             <>
               <ActionButton onClick={() => onCopyAIMessage(message.text)} icon={Copy} tooltipText="Copy" />
               {!message.downloadableFile && <ActionButton onClick={onDownloadAIMessage} icon={Download} tooltipText="Download Text" />}
@@ -269,12 +268,9 @@ export function ChatMessage({
               <ActionButton onClick={onDislikeAIMessage} icon={ThumbsDown} tooltipText="Dislike" />
             </>
           )}
-           {!isUser && message.isStandardizationRequest && ( // Specific actions for standardization AI messages
+           {!isUser && message.isStandardizationRequest && ( 
              <>
                 <ActionButton onClick={() => onCopyAIMessage(message.text)} icon={Copy} tooltipText="Copy Info Text" /> 
-                {/* Download button is now part of the message body or standardization card */}
-                {/* Regenerate might be complex for standardization, consider disabling or specific handling */}
-                {/* <ActionButton onClick={onRegenerateAIMessage} icon={RefreshCw} tooltipText="Regenerate" />  */}
                 <ActionButton onClick={onLikeAIMessage} icon={ThumbsUp} tooltipText="Like" />
                 <ActionButton onClick={onDislikeAIMessage} icon={ThumbsDown} tooltipText="Dislike" />
              </>
@@ -283,9 +279,9 @@ export function ChatMessage({
       </div>
 
       {isUser && (
-         <Avatar className="h-8 w-8 flex-shrink-0 self-start mt-1">
+         <Avatar className="h-7 w-7 flex-shrink-0 self-start mt-1">
           <AvatarFallback className="bg-accent text-accent-foreground">
-            <User size={20} />
+            <User size={18} />
           </AvatarFallback>
         </Avatar>
       )}

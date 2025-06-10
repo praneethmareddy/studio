@@ -62,11 +62,11 @@ export function ChatInput({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col p-4 border-t border-border bg-background">
+    <form onSubmit={handleSubmit} className="flex flex-col p-3 border-t border-border bg-background">
       {attachedFile && (
-        <div className="mb-2 flex items-center justify-between p-2 border border-input rounded-lg bg-card text-sm">
+        <div className="mb-2 flex items-center justify-between p-2 border border-input rounded-lg bg-card text-xs">
           <div className="flex items-center gap-2 truncate">
-            <Paperclip size={16} className="text-muted-foreground flex-shrink-0" />
+            <Paperclip size={14} className="text-muted-foreground flex-shrink-0" />
             <span className="text-card-foreground truncate" title={attachedFile.name}>{attachedFile.name}</span>
             <span className="text-muted-foreground text-xs whitespace-nowrap">({(attachedFile.size / 1024).toFixed(1)} KB)</span>
           </div>
@@ -79,7 +79,7 @@ export function ChatInput({
             disabled={isLoading}
             aria-label="Remove attached file"
           >
-            <X size={16} />
+            <X size={14} />
           </Button>
         </div>
       )}
@@ -88,12 +88,12 @@ export function ChatInput({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-10 w-10 p-0 text-muted-foreground hover:text-primary flex-shrink-0 mt-0.5"
+          className="h-8 w-8 p-0 text-muted-foreground hover:text-primary flex-shrink-0 mt-0.5"
           onClick={handleFileButtonClick}
           disabled={isLoading}
           aria-label="Attach file"
         >
-          <Paperclip size={20} />
+          <Paperclip size={18} />
         </Button>
         <input
           type="file"
@@ -107,7 +107,7 @@ export function ChatInput({
           onChange={(e) => onValueChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={attachedFile ? "Add an optional message..." : "Type your message or attach a file..."}
-          className="flex-1 resize-none bg-card border-input focus:ring-ring focus:ring-offset-0 pr-12 hover:shadow-md transition-shadow duration-300 ease-in-out"
+          className="flex-1 resize-none bg-card border-input focus:ring-ring focus:ring-offset-0 pr-10 py-1.5 hover:shadow-md transition-shadow duration-300 ease-in-out"
           rows={1}
           disabled={isLoading}
           aria-label="Chat input"
@@ -117,13 +117,13 @@ export function ChatInput({
           size="icon"
           disabled={isLoading || (!value.trim() && !attachedFile)}
           className={cn(
-            "absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-foreground",
+            "absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground",
             !isLoading && (value.trim() || attachedFile) && "hover:animate-shadow-pulse"
             )}
           variant="ghost"
           aria-label="Send message"
         >
-          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowUp size={18} />}
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp size={16} />}
         </Button>
       </div>
     </form>
